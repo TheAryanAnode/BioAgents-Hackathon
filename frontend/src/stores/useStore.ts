@@ -6,10 +6,11 @@ import type {
   GraphData,
   GraphNode,
   Hypothesis,
+  SessionState,
   WsEvent,
 } from "../lib/types";
 
-export type View = "graph" | "hypotheses" | "opportunities" | "chat";
+export type View = "graph" | "hypotheses" | "chat";
 export type Stage =
   | "idle"
   | "ingestion"
@@ -27,6 +28,7 @@ interface Store {
   stage: Stage;
   running: boolean;
   geminiLive: boolean;
+  geminiQuotaExhausted: boolean;
 
   graph: GraphData;
   hypotheses: Hypothesis[];
@@ -41,13 +43,14 @@ interface Store {
   setView: (v: View) => void;
   setQuery: (q: string) => void;
   setSession: (id: string) => void;
-  setGemini: (live: boolean) => void;
+  setGemini: (live: boolean, quotaExhausted?: boolean) => void;
   setRunning: (r: boolean) => void;
   selectNode: (n: GraphNode | null) => void;
   selectHypothesis: (id: string | null) => void;
   toggleAudit: () => void;
   addChat: (m: ChatMessage) => void;
   reset: () => void;
+  loadSession: (state: SessionState & { done?: boolean }) => void;
   applyEvent: (e: WsEvent) => void;
 }
 
@@ -60,6 +63,7 @@ export const useStore = create<Store>((set, get) => ({
   stage: "idle",
   running: false,
   geminiLive: false,
+  geminiQuotaExhausted: false,
 
   graph: emptyGraph,
   hypotheses: [],
@@ -74,7 +78,8 @@ export const useStore = create<Store>((set, get) => ({
   setView: (v) => set({ view: v }),
   setQuery: (q) => set({ query: q }),
   setSession: (id) => set({ sessionId: id }),
-  setGemini: (live) => set({ geminiLive: live }),
+  setGemini: (live: boolean, quotaExhausted?: boolean) =>
+    set({ geminiLive: live, geminiQuotaExhausted: quotaExhausted ?? false }),
   setRunning: (r) => set({ running: r }),
   selectNode: (n) => set({ selectedNode: n }),
   selectHypothesis: (id) => set({ selectedHypothesisId: id }),
@@ -93,8 +98,25 @@ export const useStore = create<Store>((set, get) => ({
       stage: "idle",
     }),
 
+  loadSession: (state) =>
+    set((s) => ({
+      graph: state.graph ?? emptyGraph,
+      hypotheses: state.hypotheses ?? [],
+      selectedHypothesisId:
+        s.selectedHypothesisId ?? state.hypotheses?.[0]?.id ?? null,
+      dashboard: state.dashboard ?? null,
+      audit: state.audit ?? [],
+      stage: (state.stage as Stage) || s.stage,
+      running: state.done ? false : s.running,
+    })),
+
   applyEvent: (e) => {
     switch (e.type) {
+      case "ping":
+        break;
+      case "snapshot":
+        get().loadSession(e.payload as SessionState & { done?: boolean });
+        break;
       case "audit":
         set((s) => ({ audit: [...s.audit, e.payload as AuditEntry] }));
         break;

@@ -31,9 +31,11 @@ async def on_startup() -> None:
     init_db()
     llm = get_llm()
     emb = EmbeddingClient()
+    s = get_settings()
     print(
         f"[SynthesisOS] gemini={'on' if llm.enabled else 'off (demo mode)'} "
-        f"embeddings={emb.mode}"
+        f"pipeline_llm={'on' if llm.pipeline_llm_allowed else 'off'} "
+        f"embeddings={emb.mode} max_rpm={s.gemini_max_rpm}"
     )
 
 

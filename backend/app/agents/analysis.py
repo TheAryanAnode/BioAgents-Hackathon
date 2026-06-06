@@ -28,7 +28,7 @@ class AnalysisAgent:
         papers = list(ctx.session.papers.values())
         await ctx.audit(
             self.name, "Extract entities",
-            detail=f"{len(papers)} papers · {'Gemini' if ctx.llm.enabled else 'lexicon'}",
+            detail=f"{len(papers)} papers · {'Gemini (pipeline)' if ctx.llm.pipeline_llm_allowed else 'lexicon'}",
         )
 
         paper_entities: dict[str, list[str]] = {}
@@ -38,7 +38,7 @@ class AnalysisAgent:
         with timer() as t:
             for p in papers:
                 ents = None
-                if ctx.llm.enabled:
+                if ctx.llm.pipeline_llm_allowed:
                     ents = self._entities_llm(ctx, p)
                 if not ents:
                     ents = extract_entities(f"{p.title}. {p.abstract}")
@@ -48,10 +48,13 @@ class AnalysisAgent:
                     entity_type.setdefault(e, ENTITY_TYPE.get(e.lower(), "concept"))
 
         # Drop noisy generic concepts that appear in only one paper (lexicon
-        # terms are always kept since they're domain-meaningful).
+        # terms and user uploads are always kept since they're domain-meaningful).
+        user_paper_ids = {p.id for p in papers if p.source == "user_pdf"}
         keep = {
             e for e, pids in entity_papers.items()
-            if is_lexicon_term(e) or len(pids) >= 2
+            if is_lexicon_term(e)
+            or len(pids) >= 2
+            or any(pid in user_paper_ids for pid in pids)
         }
         if len(keep) >= 10:  # only prune when the graph stays rich enough
             entity_papers = {e: pids for e, pids in entity_papers.items() if e in keep}

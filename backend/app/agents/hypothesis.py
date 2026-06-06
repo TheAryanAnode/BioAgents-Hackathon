@@ -5,6 +5,7 @@ import uuid
 import networkx as nx
 
 from app.agents.base import AgentContext, timer
+from app.agents.subgraph import build_hypothesis_subgraph
 from app.models.schemas import Hypothesis
 
 
@@ -79,7 +80,7 @@ class HypothesisAgent:
 
     def _build(self, ctx: AgentContext, a: str, b: str, bridge: str) -> Hypothesis:
         gen = None
-        if ctx.llm.enabled:
+        if ctx.llm.pipeline_llm_allowed:
             gen = self._statement_llm(ctx, a, b, bridge)
         if gen:
             statement, rationale = gen["statement"], gen.get("rationale", "")
@@ -93,7 +94,10 @@ class HypothesisAgent:
                 f"paper directly links {a} to {b}. This open triangle suggests {bridge} "
                 f"may be the mechanistic bridge between them."
             )
-        return Hypothesis(
+        entities = [a, bridge, b]
+        concept_ids: dict[str, str] = ctx.work.get("concept_ids", {})
+        gap_ids = [concept_ids[e] for e in entities if concept_ids.get(e)]
+        h = Hypothesis(
             id=str(uuid.uuid4())[:8],
             statement=statement,
             rationale=rationale,
@@ -101,8 +105,11 @@ class HypothesisAgent:
             status="emerging",
             evidence=[],
             history=[],
-            entities=[a, bridge, b],
+            entities=entities,
+            gapNodeIds=gap_ids,
         )
+        h.subgraph = build_hypothesis_subgraph(ctx, entities)
+        return h
 
     def candidate_gaps(self, ctx: AgentContext):
         g: nx.Graph = ctx.work.get("nx_graph")

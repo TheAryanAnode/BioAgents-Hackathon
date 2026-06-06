@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     gemini_fast_model: str = "gemini-2.5-flash"
     gemini_deep_model: str = "gemini-2.5-pro"
     gemini_embed_model: str = "text-embedding-004"
+    # Free tier ≈5 RPM — keep pipeline off Gemini by default; chat/report use the budget.
+    gemini_use_in_pipeline: bool = False
+    gemini_use_for_embeddings: bool = False
+    gemini_max_rpm: int = 4
+    gemini_timeout_seconds: float = 20.0
+    gemini_quota_cooldown_seconds: float = 55.0
     entrez_email: str = ""
 
     data_dir: str = "./data"

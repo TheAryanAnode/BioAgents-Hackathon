@@ -5,6 +5,7 @@ import asyncio
 from app.agents.base import AgentContext, timer
 from app.core.config import get_settings
 from app.models.schemas import GraphNode, PaperRecord
+from app.services.paper_urls import resolve_paper_url
 from app.services import arxiv_client, pubmed, seed, semantic_scholar
 
 
@@ -61,7 +62,7 @@ class IngestionAgent:
             citationCount=record.citation_count,
             authors=record.authors,
             summary=record.abstract[:400] if record.abstract else None,
-            url=record.url,
+            url=resolve_paper_url(record),
         )
 
     async def run_query(self, ctx: AgentContext) -> list[PaperRecord]:

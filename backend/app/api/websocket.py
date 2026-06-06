@@ -18,6 +18,17 @@ async def ws_endpoint(websocket: WebSocket, session_id: str):
         await websocket.close()
         return
 
+    # Full state snapshot so clients that connect late (or miss events) still hydrate.
+    await websocket.send_json(
+        {
+            "type": "snapshot",
+            "payload": {
+                **session.state.model_dump(),
+                "done": session.done,
+            },
+        }
+    )
+
     queue = session.subscribe()
     try:
         while True:

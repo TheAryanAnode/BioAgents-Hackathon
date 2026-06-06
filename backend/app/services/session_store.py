@@ -27,9 +27,6 @@ class Session:
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue()
-        # Replay backlog so a late-connecting client catches up.
-        for ev in self.backlog:
-            q.put_nowait(ev)
         self.subscribers.append(q)
         return q
 

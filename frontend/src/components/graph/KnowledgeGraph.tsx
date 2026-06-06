@@ -20,6 +20,8 @@ export function KnowledgeGraph({
   filter: { types: Set<string>; source: "all" | "user_pdf" | "api"; yearMin: number; keyword: string };
 }) {
   const graph = useStore((s) => s.graph);
+  const stage = useStore((s) => s.stage);
+  const running = useStore((s) => s.running);
   const selectNode = useStore((s) => s.selectNode);
   const selectedNode = useStore((s) => s.selectedNode);
   const fgRef = useRef<any>(null);
@@ -86,8 +88,17 @@ export function KnowledgeGraph({
   return (
     <div ref={wrapRef} className="relative h-full w-full">
       {data.nodes.length === 0 ? (
-        <div className="flex h-full items-center justify-center">
-          <span className="label-mono">awaiting ingestion…</span>
+        <div className="flex h-full flex-col items-center justify-center gap-2">
+          <span className="label-mono">
+            {running || stage === "ingestion"
+              ? "ingesting literature…"
+              : "awaiting graph data…"}
+          </span>
+          {running && (
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              stage: {stage}
+            </span>
+          )}
         </div>
       ) : (
         <ForceGraph2D

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from app.agents.base import AgentContext, timer
-from app.models.schemas import ConfidencePoint, EvidenceItem, Hypothesis
+from app.agents.subgraph import build_hypothesis_subgraph
+from app.models.schemas import ConfidenceBreakdown, ConfidencePoint, EvidenceItem, Hypothesis
+from app.services.paper_urls import resolve_paper_url
 
 _CONTRADICT_CUES = (
     "no association", "not associated", "failed to", "no significant",
@@ -16,9 +18,6 @@ def _entity_overlap(entities: list[str], text: str) -> int:
 
 
 def _heuristic_stance(entities: list[str], text: str, relevance: float) -> tuple[str, float]:
-    """Return (stance, blended_relevance) using the full paper text plus the
-    vector relevance. Entity overlap drives a credible support signal even when
-    the embedding backend is the hashing fallback."""
     low = text.lower()
     overlap = _entity_overlap(entities, text)
     blended = max(relevance, min(1.0, 0.3 + 0.22 * overlap))
@@ -31,6 +30,17 @@ def _heuristic_stance(entities: list[str], text: str, relevance: float) -> tuple
     if blended < 0.2:
         return "neutral", blended
     return "neutral", blended
+
+
+def _paper_url(ctx: AgentContext, pid: str, rec) -> str | None:
+    if rec:
+        url = resolve_paper_url(rec)
+        if url:
+            return url
+    node = next((n for n in ctx.session.state.graph.nodes if n.id == pid), None)
+    if node and node.url:
+        return node.url
+    return None
 
 
 class EvidenceAgent:
@@ -47,12 +57,35 @@ class EvidenceAgent:
             return data["stance"]
         return None
 
-    def _score(self, evidence: list[EvidenceItem]) -> int:
+    def _score_detail(self, evidence: list[EvidenceItem]) -> tuple[int, ConfidenceBreakdown]:
         support = sum(1 for e in evidence if e.stance == "support")
         contradict = sum(1 for e in evidence if e.stance == "contradict")
+        neutral = sum(1 for e in evidence if e.stance == "neutral")
         rel = sum(e.relevance for e in evidence) / max(1, len(evidence))
-        raw = 50 + 12 * support - 18 * contradict + rel * 20
-        return max(8, min(95, int(round(raw))))
+        support_boost = 12 * support
+        contradict_penalty = 18 * contradict
+        relevance_boost = int(round(rel * 20))
+        raw = 50 + support_boost - contradict_penalty + relevance_boost
+        score = max(8, min(95, int(round(raw))))
+        return score, ConfidenceBreakdown(
+            base=50,
+            supportCount=support,
+            contradictCount=contradict,
+            neutralCount=neutral,
+            supportBoost=support_boost,
+            contradictPenalty=contradict_penalty,
+            relevanceBoost=relevance_boost,
+            avgRelevance=round(rel, 3),
+        )
+
+    def _confidence_explanation(self, h: Hypothesis, bd: ConfidenceBreakdown, score: int) -> str:
+        return (
+            f"Confidence {score}% starts from a {bd.base}% baseline, adds +{bd.supportBoost} "
+            f"from {bd.supportCount} supporting paper(s), subtracts {bd.contradictPenalty} "
+            f"from {bd.contradictCount} contradicting paper(s), and adds +{bd.relevanceBoost} "
+            f"from average semantic relevance ({int(bd.avgRelevance * 100)}%). "
+            f"{bd.neutralCount} neutral source(s) did not move the score."
+        )
 
     def _history(self, ctx: AgentContext, evidence: list[EvidenceItem], final: int) -> list[ConfidencePoint]:
         years = sorted({e.year for e in evidence if e.year} | {2018, 2020, 2022, 2024})
@@ -79,44 +112,74 @@ class EvidenceAgent:
             seen_papers.add(pid)
             rec = ctx.session.papers.get(pid)
             snippet = hit["document"][:240]
-            # Classify against the fuller paper text for a stronger signal.
             full_text = f"{rec.title} {rec.abstract}" if rec else hit["document"]
             stance = None
-            if ctx.llm.enabled:
+            if ctx.llm.pipeline_llm_allowed:
                 stance = self._stance_llm(ctx, h.statement, snippet)
             if stance is None:
                 stance, blended = _heuristic_stance(h.entities, full_text, hit["relevance"])
             else:
                 blended = max(hit["relevance"], 0.4)
+            title = meta.get("title", rec.title if rec else pid)
             evidence.append(
                 EvidenceItem(
                     paperId=pid,
-                    title=meta.get("title", rec.title if rec else pid),
+                    title=title,
                     source=meta.get("source", rec.source if rec else "derived"),
                     relevance=round(blended, 3),
                     stance=stance,  # type: ignore[arg-type]
                     snippet=snippet,
                     year=rec.year if rec else meta.get("year"),
-                    url=rec.url if rec else None,
+                    url=_paper_url(ctx, pid, rec),
                 )
             )
-        # Ensure at least a little signal so the panel isn't empty.
+
+        # User uploads with entity overlap must be eligible even if vector rank is low.
+        for rec in ctx.session.papers.values():
+            if rec.source != "user_pdf" or rec.id in seen_papers:
+                continue
+            body = f"{rec.title}. {rec.abstract}. {rec.full_text_excerpt or ''}"
+            overlap = _entity_overlap(h.entities, body)
+            if overlap < 1:
+                continue
+            seen_papers.add(rec.id)
+            snippet = (rec.abstract or rec.title)[:240]
+            stance, blended = _heuristic_stance(h.entities, body, min(1.0, 0.45 + 0.15 * overlap))
+            evidence.append(
+                EvidenceItem(
+                    paperId=rec.id,
+                    title=rec.title,
+                    source=rec.source,
+                    relevance=round(blended, 3),
+                    stance=stance,  # type: ignore[arg-type]
+                    snippet=snippet,
+                    year=rec.year,
+                    url=resolve_paper_url(rec),
+                )
+            )
         if not evidence:
             for rec in list(ctx.session.papers.values())[:3]:
                 evidence.append(
                     EvidenceItem(
                         paperId=rec.id, title=rec.title, source=rec.source,
                         relevance=0.3, stance="neutral",
-                        snippet=(rec.abstract or rec.title)[:240], year=rec.year, url=rec.url,
+                        snippet=(rec.abstract or rec.title)[:240], year=rec.year,
+                        url=resolve_paper_url(rec),
                     )
                 )
         h.evidence = evidence
-        h.confidence = self._score(evidence)
+        score, breakdown = self._score_detail(evidence)
+        h.confidence = score
+        h.confidenceBreakdown = breakdown
+        h.confidenceExplanation = self._confidence_explanation(h, breakdown, score)
         h.history = self._history(ctx, evidence, h.confidence)
-        support = sum(1 for e in evidence if e.stance == "support")
-        contradict = sum(1 for e in evidence if e.stance == "contradict")
+        support = breakdown.supportCount
+        contradict = breakdown.contradictCount
         h.status = "contested" if contradict >= support and contradict > 0 else (
             "supported" if h.confidence >= 70 else "emerging"
+        )
+        h.subgraph = build_hypothesis_subgraph(
+            ctx, h.entities, evidence_paper_ids=[e.paperId for e in h.evidence]
         )
         return h
 
@@ -131,8 +194,8 @@ class EvidenceAgent:
                     detail=f"{h.statement[:60]} → {h.confidence}% ({h.status})",
                     params={
                         "hypothesis": h.id,
-                        "support": sum(1 for e in h.evidence if e.stance == "support"),
-                        "contradict": sum(1 for e in h.evidence if e.stance == "contradict"),
+                        "support": h.confidenceBreakdown.supportCount if h.confidenceBreakdown else 0,
+                        "contradict": h.confidenceBreakdown.contradictCount if h.confidenceBreakdown else 0,
                         "confidence": h.confidence,
                     },
                 )

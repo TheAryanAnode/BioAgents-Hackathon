@@ -71,6 +71,7 @@ class AgentContext:
             pass
 
     async def stage(self, stage: str) -> None:
+        self.session.state.stage = stage
         await self.session.emit({"type": "stage", "payload": {"stage": stage}})
 
 

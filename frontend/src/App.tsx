@@ -16,7 +16,7 @@ export default function App() {
   useEffect(() => {
     api
       .health()
-      .then((h) => setGemini(h.gemini))
+      .then((h) => setGemini(h.gemini, h.geminiQuotaExhausted))
       .catch(() => setGemini(false));
   }, [setGemini]);
 
@@ -24,6 +24,7 @@ export default function App() {
     reset();
     setQuery(query);
     setRunning(true);
+    useStore.setState({ stage: "ingestion" });
     try {
       const { sessionId } = await api.startResearch(query);
       setSession(sessionId);

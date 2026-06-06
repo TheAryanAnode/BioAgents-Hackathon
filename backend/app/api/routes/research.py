@@ -14,6 +14,8 @@ from app.agents.graph_builder import GraphBuilderAgent
 from app.agents.hypothesis import HypothesisAgent
 from app.agents.ingestion import IngestionAgent
 from app.agents.orchestrator import get_context, make_context, run_pipeline
+from app.agents.post_upload import after_paper_added
+from app.agents.report import generate as generate_report
 from app.core.config import get_settings
 from app.core.llm import get_llm
 from app.db.database import SessionLocal, UploadRow
@@ -24,6 +26,7 @@ from app.models.schemas import (
     SessionState,
 )
 from app.services import pdf_ingest
+from app.services.paper_urls import resolve_paper_url
 from app.services.session_store import store
 
 router = APIRouter(prefix="/api")
@@ -31,7 +34,15 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "gemini": get_llm().enabled}
+    llm = get_llm()
+    return {
+        "status": "ok",
+        "gemini": llm.enabled,
+        "geminiPipeline": llm.pipeline_llm_allowed,
+        "geminiEmbeddings": get_settings().gemini_use_for_embeddings,
+        "geminiQuotaExhausted": llm.quota_exhausted,
+        "geminiMaxRpm": get_settings().gemini_max_rpm,
+    }
 
 
 @router.post("/research")
@@ -61,9 +72,24 @@ async def generate_hypothesis(session_id: str):
     agent: HypothesisAgent = ctx.work.get("hypothesis_agent") or HypothesisAgent()
     h = await agent.propose_one(ctx)
     await EvidenceAgent().evaluate(ctx, h)
+    CommercialAgent().attach_opportunity(ctx, h)
     ctx.session.state.hypotheses.append(h)
+    await ctx.session.emit({"type": "hypotheses", "payload": [x.model_dump() for x in ctx.session.state.hypotheses]})
     await ctx.audit("hypothesis", "Manual hypothesis added", detail=h.statement[:80])
     return h
+
+
+@router.post("/sessions/{session_id}/hypotheses/{hypothesis_id}/report")
+async def hypothesis_report(session_id: str, hypothesis_id: str):
+    ctx = get_context(session_id)
+    if not ctx:
+        raise HTTPException(404, "session not ready")
+    h = next((x for x in ctx.session.state.hypotheses if x.id == hypothesis_id), None)
+    if not h:
+        raise HTTPException(404, "hypothesis not found")
+    report = await generate_report(ctx, h)
+    await ctx.audit("report", "Full report generated", detail=h.statement[:60], params={"hypothesisId": hypothesis_id})
+    return report
 
 
 @router.post("/sessions/{session_id}/chat")
@@ -134,17 +160,18 @@ async def upload_paper(
     node = GraphNode(
         id=record.id, label=record.title, type="paper", source="user_pdf",
         year=record.year, summary=record.abstract[:400] or None,
+        url=resolve_paper_url(record),
     )
     session.state.graph.nodes.append(node)
     await session.emit({"type": "node", "payload": node.model_dump()})
 
-    # Reprocess so the upload joins clusters and can serve as evidence.
+    # Reprocess so the upload joins clusters and can drive hypotheses.
     await AnalysisAgent().run(ctx)
     await GraphBuilderAgent().run(ctx)
-    await ctx.audit("graph_builder", "Linked upload to graph", detail=record.title[:70],
-                    params={"paper_id": record.id})
-    if session.state.hypotheses:
-        await EvidenceAgent().run(ctx)
-        await CommercialAgent().run(ctx)
+    await ctx.audit(
+        "graph_builder", "Linked upload to graph", detail=record.title[:70],
+        params={"paper_id": record.id},
+    )
+    await after_paper_added(ctx, record)
 
     return {"ok": True, "paperId": record.id}

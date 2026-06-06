@@ -56,7 +56,22 @@ The multi-agent pipeline:
 
 ## Quick start
 
-### 1. Backend (Python 3.12)
+### One command (backend + frontend)
+
+From the repo root:
+
+```bash
+chmod +x run.sh   # first time only
+./run.sh
+```
+
+Open http://localhost:5173. **Ctrl+C** stops both servers. Optional: `BACKEND_PORT=8001 FRONTEND_PORT=5174 ./run.sh`
+
+On first run, `run.sh` creates the Python venv, installs dependencies if needed, and copies `backend/.env.example` → `backend/.env`.
+
+### Manual start
+
+#### 1. Backend (Python 3.12)
 
 ```bash
 cd backend
@@ -68,7 +83,7 @@ cp .env.example .env               # optional: add GOOGLE_API_KEY for full Gemin
 
 The server prints its mode on startup, e.g. `gemini=off (demo mode) embeddings=hashing`.
 
-### 2. Frontend (Node 18+)
+#### 2. Frontend (Node 18+)
 
 ```bash
 cd frontend
@@ -81,8 +96,11 @@ Open http://localhost:5173. The Vite dev server proxies `/api` and `/ws` to the 
 **If you see `vite: command not found`:** your environment may skip devDependencies (e.g. `NODE_ENV=production`). Run `npm install --include=dev` (or `NODE_ENV=development npm install`). The `npm run` scripts invoke Vite via `node ./node_modules/vite/...` so a working `node` is enough once `vite` is installed.
 
 > No API key? Everything still runs in deterministic demo mode. Add a
-> `GOOGLE_API_KEY` to `backend/.env` to enable Gemini-powered extraction,
-> evidence classification, and chat.
+> `GOOGLE_API_KEY` to `backend/.env` to enable Gemini for **chat** and **reports**.
+>
+> **Free-tier rate limits:** Gemini free tier allows ~5 requests/minute. By default
+> `GEMINI_USE_IN_PIPELINE=false` so the research graph/hypothesis pipeline uses
+> fast heuristics and does not burn your quota. Chat and “Generate full report” use Gemini.
 
 ---
 

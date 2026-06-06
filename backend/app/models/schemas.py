@@ -69,6 +69,40 @@ class EvidenceItem(BaseModel):
     url: Optional[str] = None
 
 
+class ConfidenceBreakdown(BaseModel):
+    base: int = 50
+    supportCount: int = 0
+    contradictCount: int = 0
+    neutralCount: int = 0
+    supportBoost: int = 0
+    contradictPenalty: int = 0
+    relevanceBoost: int = 0
+    avgRelevance: float = 0.0
+
+
+class RoiBreakdown(BaseModel):
+    confidenceComponent: int = 0
+    unmetNeedComponent: int = 0
+    whitespaceComponent: int = 0
+    formula: str = "0.4×confidence + 0.3×unmetNeed + 0.3×whitespace"
+
+
+class HypothesisOpportunity(BaseModel):
+    id: str
+    hypothesisId: str
+    title: str
+    subgroup: str
+    patientPopulation: int
+    unmetNeed: int
+    competition: int
+    roiScore: int
+    rationale: str
+    roiRationale: str = ""
+    roiBreakdown: RoiBreakdown = Field(default_factory=RoiBreakdown)
+    estimatedFundingUsd: int = 0
+    whitespace: int = 0
+
+
 class ConfidencePoint(BaseModel):
     t: str
     confidence: int
@@ -83,6 +117,39 @@ class Hypothesis(BaseModel):
     evidence: list[EvidenceItem] = Field(default_factory=list)
     history: list[ConfidencePoint] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
+    subgraph: GraphData = Field(default_factory=GraphData)
+    gapNodeIds: list[str] = Field(default_factory=list)
+    confidenceExplanation: str = ""
+    confidenceBreakdown: Optional[ConfidenceBreakdown] = None
+    opportunity: Optional[HypothesisOpportunity] = None
+
+
+class ReportSection(BaseModel):
+    id: str
+    title: str
+    body: str
+    bullets: list[str] = Field(default_factory=list)
+    highlight: str = ""
+
+
+class ReportReference(BaseModel):
+    title: str
+    url: Optional[str] = None
+    stance: str = "neutral"
+
+
+class HypothesisReport(BaseModel):
+    id: str
+    hypothesisId: str
+    title: str
+    generatedAt: str
+    fundingEstimateUsd: int = 0
+    patientPopulation: int = 0
+    timelineMonths: int = 18
+    sections: list[ReportSection] = Field(default_factory=list)
+    references: list[ReportReference] = Field(default_factory=list)
+    keyMetrics: dict[str, str] = Field(default_factory=dict)
+    markdown: str = ""  # plain-text export fallback
 
 
 class Opportunity(BaseModel):
@@ -127,6 +194,7 @@ class AuditEntry(BaseModel):
 class SessionState(BaseModel):
     sessionId: str
     query: str
+    stage: str = "idle"
     graph: GraphData = Field(default_factory=GraphData)
     hypotheses: list[Hypothesis] = Field(default_factory=list)
     dashboard: Optional[DashboardData] = None
@@ -136,6 +204,13 @@ class SessionState(BaseModel):
 # Request bodies
 class ResearchRequest(BaseModel):
     query: str
+
+
+class ChatCitation(BaseModel):
+    paperId: str
+    title: str
+    source: SourceType
+    url: Optional[str] = None
 
 
 class ChatRequest(BaseModel):

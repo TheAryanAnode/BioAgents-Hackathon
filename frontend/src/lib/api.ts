@@ -1,4 +1,4 @@
-import type { Hypothesis, SessionState } from "./types";
+import type { Hypothesis, HypothesisReport, SessionState } from "./types";
 
 const BASE = "/api";
 
@@ -11,7 +11,12 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  async health(): Promise<{ status: string; gemini: boolean }> {
+  async health(): Promise<{
+    status: string;
+    gemini: boolean;
+    geminiPipeline?: boolean;
+    geminiQuotaExhausted?: boolean;
+  }> {
     return json(await fetch(`${BASE}/health`));
   },
 
@@ -64,6 +69,17 @@ export const api = {
       await fetch(`${BASE}/sessions/${sessionId}/upload`, {
         method: "POST",
         body: form,
+      }),
+    );
+  },
+
+  async generateReport(
+    sessionId: string,
+    hypothesisId: string,
+  ): Promise<HypothesisReport> {
+    return json(
+      await fetch(`${BASE}/sessions/${sessionId}/hypotheses/${hypothesisId}/report`, {
+        method: "POST",
       }),
     );
   },

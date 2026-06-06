@@ -4,6 +4,7 @@ import networkx as nx
 
 from app.agents.base import AgentContext, timer
 from app.models.schemas import Cluster, GraphData, GraphLink, GraphNode
+from app.services.paper_urls import resolve_paper_url
 
 
 class GraphBuilderAgent:
@@ -84,7 +85,8 @@ class GraphBuilderAgent:
                         cluster=cl, clusterLabel=cluster_objs[cl].label if cluster_objs else None,
                         centrality=round(centrality.get(n, 0), 4),
                         year=rec.year, citationCount=rec.citation_count,
-                        authors=rec.authors, summary=rec.abstract[:400] or None, url=rec.url,
+                        authors=rec.authors, summary=rec.abstract[:400] or None,
+                        url=resolve_paper_url(rec),
                     )
                 )
             else:

@@ -7,7 +7,9 @@ from app.models.schemas import (
     DashboardData,
     DashboardMetrics,
     Hypothesis,
+    HypothesisOpportunity,
     Opportunity,
+    RoiBreakdown,
 )
 
 
@@ -19,23 +21,38 @@ def _stable_int(seed: str, lo: int, hi: int) -> int:
 class CommercialAgent:
     name = "commercial"
 
-    def _opportunity(self, ctx: AgentContext, h: Hypothesis) -> Opportunity:
+    def attach_opportunity(self, ctx: AgentContext, h: Hypothesis) -> HypothesisOpportunity:
+        opp = self._hypothesis_opportunity(ctx, h)
+        h.opportunity = opp
+        return opp
+
+    def _hypothesis_opportunity(self, ctx: AgentContext, h: Hypothesis) -> HypothesisOpportunity:
         ents = h.entities or [ctx.query]
         subgroup = " + ".join(dict.fromkeys([e for e in ents if e]))[:60] or ctx.query
         population = _stable_int(h.id + "pop", 8_000, 480_000)
-        # Novel (emerging) hypotheses = more whitespace (lower competition).
         competition = {"emerging": 22, "supported": 48, "contested": 35}.get(h.status, 40)
         competition = max(5, min(95, competition + _stable_int(h.id + "c", -8, 8)))
         unmet = max(20, min(98, h.confidence + _stable_int(h.id + "u", 5, 25)))
         whitespace = 100 - competition
-        roi = int(round(0.4 * h.confidence + 0.3 * unmet + 0.3 * whitespace))
+
+        conf_comp = int(round(0.4 * h.confidence))
+        unmet_comp = int(round(0.3 * unmet))
+        ws_comp = int(round(0.3 * whitespace))
+        roi = max(5, min(98, conf_comp + unmet_comp + ws_comp))
+
+        roi_rationale = (
+            f"ROI score {roi}/100 = 40% of hypothesis confidence ({h.confidence} → +{conf_comp}) "
+            f"+ 30% unmet need ({unmet} → +{unmet_comp}) "
+            f"+ 30% competitive whitespace ({whitespace} → +{ws_comp}). "
+            f"Targets ~{population:,} patients in the {subgroup} subgroup."
+        )
 
         rationale = (
             f"Targets the {subgroup} subgroup. Confidence {h.confidence}% with "
             f"{whitespace}/100 competitive whitespace suggests an under-served "
             f"opportunity of ~{population:,} patients."
         )
-        if ctx.llm.enabled:
+        if ctx.llm.pipeline_llm_allowed:
             text = ctx.llm.complete(
                 "In one sentence, give the commercial rationale for pursuing this "
                 f"hypothesis as a drug-development opportunity: {h.statement}"
@@ -43,7 +60,9 @@ class CommercialAgent:
             if text:
                 rationale = text.strip()[:300]
 
-        return Opportunity(
+        funding = 250_000 + min(population // 50, 3_500_000) + unmet * 8_000
+
+        return HypothesisOpportunity(
             id=f"opp_{h.id}",
             hypothesisId=h.id,
             title=f"{ents[0]} → {ents[-1]}" if len(ents) >= 2 else (ents[0] if ents else ctx.query),
@@ -53,6 +72,28 @@ class CommercialAgent:
             competition=competition,
             roiScore=roi,
             rationale=rationale,
+            roiRationale=roi_rationale,
+            roiBreakdown=RoiBreakdown(
+                confidenceComponent=conf_comp,
+                unmetNeedComponent=unmet_comp,
+                whitespaceComponent=ws_comp,
+            ),
+            estimatedFundingUsd=int(funding),
+            whitespace=whitespace,
+        )
+
+    def _opportunity(self, ctx: AgentContext, h: Hypothesis) -> Opportunity:
+        ho = h.opportunity or self._hypothesis_opportunity(ctx, h)
+        return Opportunity(
+            id=ho.id,
+            hypothesisId=ho.hypothesisId,
+            title=ho.title,
+            subgroup=ho.subgroup,
+            patientPopulation=ho.patientPopulation,
+            unmetNeed=ho.unmetNeed,
+            competition=ho.competition,
+            roiScore=ho.roiScore,
+            rationale=ho.rationale,
         )
 
     def _trends(self, ctx: AgentContext) -> tuple[list[dict], list[str]]:
@@ -75,12 +116,11 @@ class CommercialAgent:
             rows.append(row)
         return rows, topics
 
-    def _stratification(self, opps: list[Opportunity]) -> list[dict]:
-        rows = [
+    def _stratification(self, opps: list[HypothesisOpportunity]) -> list[dict]:
+        return [
             {"subgroup": o.subgroup[:24], "prevalence": min(100, int(o.patientPopulation / 5000))}
             for o in opps
-        ]
-        return rows[:6]
+        ][:6]
 
     def _cross_disease(self, ctx: AgentContext) -> list[dict]:
         cooc: dict[tuple[str, str], int] = ctx.work.get("cooc", {})
@@ -95,7 +135,7 @@ class CommercialAgent:
         await ctx.stage("commercial")
         hyps = ctx.session.state.hypotheses
         with timer() as t:
-            opps = [self._opportunity(ctx, h) for h in hyps]
+            opps = [self.attach_opportunity(ctx, h) for h in hyps]
             trends, topics = self._trends(ctx)
             strat = self._stratification(opps)
             cross = self._cross_disease(ctx)
@@ -111,17 +151,18 @@ class CommercialAgent:
                 patientPopulation=total_pop,
                 projectedRoi=avg_roi,
             ),
-            opportunities=opps,
+            opportunities=[self._opportunity(ctx, h) for h in hyps],
             trends=trends,
             trendTopics=topics,
             stratification=strat,
             crossDisease=cross,
         )
         ctx.session.state.dashboard = dashboard
+        await ctx.session.emit({"type": "hypotheses", "payload": [h.model_dump() for h in hyps]})
         await ctx.session.emit({"type": "dashboard", "payload": dashboard.model_dump()})
         await ctx.audit(
             self.name, "Commercial analysis complete",
-            detail=f"{len(opps)} opportunities · ~{total_pop:,} patients",
+            detail=f"{len(opps)} opportunities embedded in hypotheses",
             params={"opportunities": len(opps), "avg_confidence": avg_conf},
             duration_ms=t.elapsed_ms,
         )

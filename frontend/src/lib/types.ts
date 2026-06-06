@@ -15,7 +15,6 @@ export interface GraphNode {
   authors?: string[];
   url?: string;
   paperCount?: number;
-  // runtime fields populated by the force graph engine
   x?: number;
   y?: number;
 }
@@ -49,6 +48,40 @@ export interface ConfidencePoint {
   confidence: number;
 }
 
+export interface ConfidenceBreakdown {
+  base: number;
+  supportCount: number;
+  contradictCount: number;
+  neutralCount: number;
+  supportBoost: number;
+  contradictPenalty: number;
+  relevanceBoost: number;
+  avgRelevance: number;
+}
+
+export interface RoiBreakdown {
+  confidenceComponent: number;
+  unmetNeedComponent: number;
+  whitespaceComponent: number;
+  formula: string;
+}
+
+export interface HypothesisOpportunity {
+  id: string;
+  hypothesisId: string;
+  title: string;
+  subgroup: string;
+  patientPopulation: number;
+  unmetNeed: number;
+  competition: number;
+  roiScore: number;
+  rationale: string;
+  roiRationale: string;
+  roiBreakdown: RoiBreakdown;
+  estimatedFundingUsd: number;
+  whitespace: number;
+}
+
 export interface Hypothesis {
   id: string;
   statement: string;
@@ -58,6 +91,39 @@ export interface Hypothesis {
   evidence: EvidenceItem[];
   history: ConfidencePoint[];
   entities: string[];
+  subgraph?: GraphData;
+  gapNodeIds?: string[];
+  confidenceExplanation?: string;
+  confidenceBreakdown?: ConfidenceBreakdown;
+  opportunity?: HypothesisOpportunity;
+}
+
+export interface ReportSection {
+  id: string;
+  title: string;
+  body: string;
+  bullets?: string[];
+  highlight?: string;
+}
+
+export interface ReportReference {
+  title: string;
+  url?: string | null;
+  stance?: string;
+}
+
+export interface HypothesisReport {
+  id: string;
+  hypothesisId: string;
+  title: string;
+  generatedAt: string;
+  fundingEstimateUsd: number;
+  patientPopulation: number;
+  timelineMonths?: number;
+  sections: ReportSection[];
+  references?: ReportReference[];
+  keyMetrics?: Record<string, string>;
+  markdown?: string;
 }
 
 export interface Opportunity {
@@ -66,9 +132,9 @@ export interface Opportunity {
   title: string;
   subgroup: string;
   patientPopulation: number;
-  unmetNeed: number; // 0-100
-  competition: number; // 0-100, lower = whitespace
-  roiScore: number; // 0-100
+  unmetNeed: number;
+  competition: number;
+  roiScore: number;
   rationale: string;
 }
 
@@ -106,6 +172,7 @@ export interface ChatCitation {
   paperId: string;
   title: string;
   source: SourceType;
+  url?: string;
 }
 
 export interface ChatMessage {
@@ -119,9 +186,10 @@ export interface ChatMessage {
 export interface SessionState {
   sessionId: string;
   query: string;
+  stage?: string;
   graph: GraphData;
   hypotheses: Hypothesis[];
-  dashboard: DashboardData;
+  dashboard: DashboardData | null;
   audit: AuditEntry[];
 }
 
@@ -135,6 +203,7 @@ export interface WsEvent {
     | "node"
     | "done"
     | "error"
-    | "ping";
+    | "ping"
+    | "snapshot";
   payload: any;
 }

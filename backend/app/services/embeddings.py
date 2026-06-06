@@ -14,12 +14,16 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
 import re
 from typing import Optional
 
 import numpy as np
 
 from app.core.config import get_settings
+
+# ChromaDB telemetry is incompatible with some posthog versions — disable it.
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _HASH_DIM = 384
@@ -59,10 +63,16 @@ class EmbeddingClient:
 
     @property
     def mode(self) -> str:
-        return "gemini" if self._gemini else "hashing"
+        if self._gemini and self.settings.gemini_use_for_embeddings:
+            return "gemini"
+        return "hashing"
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        if self._gemini:
+    def embed(self, texts: list[str], *, interactive: bool = False) -> list[list[float]]:
+        use_gemini = (
+            self._gemini
+            and (interactive or self.settings.gemini_use_for_embeddings)
+        )
+        if use_gemini:
             try:
                 return self._gemini.embed_documents(texts)
             except Exception:
@@ -70,7 +80,7 @@ class EmbeddingClient:
         return [_hashing_embed(t) for t in texts]
 
     def embed_one(self, text: str) -> list[float]:
-        return self.embed([text])[0]
+        return self.embed([text], interactive=True)[0]
 
 
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:

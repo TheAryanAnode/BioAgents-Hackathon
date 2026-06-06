@@ -6,7 +6,6 @@ import { cn } from "../lib/utils";
 const VIEWS: { id: View; label: string }[] = [
   { id: "graph", label: "Graph" },
   { id: "hypotheses", label: "Hypotheses" },
-  { id: "opportunities", label: "Opportunities" },
   { id: "chat", label: "Chat" },
 ];
 

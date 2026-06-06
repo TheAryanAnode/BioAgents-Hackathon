@@ -29,7 +29,9 @@ export function UploadControl() {
     setBusy(true);
     setError(null);
     try {
-      await api.uploadPaper(sessionId, file, { title, doi });
+      const res = await api.uploadPaper(sessionId, file, { title, doi });
+      const state = await api.getSession(sessionId);
+      useStore.getState().loadSession(state);
       setOpen(false);
       reset();
     } catch (e: any) {

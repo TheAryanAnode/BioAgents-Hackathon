@@ -4,7 +4,6 @@ import { Navbar, MobileNav } from "./Navbar";
 import { StageBar } from "../components/StageBar";
 import { GraphView } from "../components/graph/GraphView";
 import { HypothesisPanel } from "../components/hypothesis/HypothesisPanel";
-import { OpportunityDashboard } from "../components/dashboard/OpportunityDashboard";
 import { ChatPanel } from "../components/chat/ChatPanel";
 import { AuditLog } from "../components/audit/AuditLog";
 
@@ -20,7 +19,6 @@ export function Workspace({ onHome }: { onHome: () => void }) {
       <main className="relative flex-1 overflow-hidden">
         {view === "graph" && <GraphView />}
         {view === "hypotheses" && <HypothesisPanel />}
-        {view === "opportunities" && <OpportunityDashboard />}
         {view === "chat" && <ChatPanel />}
       </main>
       <AuditLog />

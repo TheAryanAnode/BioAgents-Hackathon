@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ExternalLink, X } from "lucide-react";
 import { useStore } from "../../stores/useStore";
 import { Badge } from "../ui/Card";
+import { PaperLink } from "../ui/PaperLink";
 import { SOURCE_LABEL } from "../../lib/utils";
 
 export function NodeDetailPanel() {
@@ -40,7 +41,11 @@ export function NodeDetailPanel() {
 
           <div className="flex-1 overflow-y-auto px-6 py-6">
             <h2 className="text-balance text-2xl font-bold leading-tight tracking-tight">
-              {node.label}
+              {node.type === "paper" && node.url ? (
+                <PaperLink title={node.label} url={node.url} className="text-2xl font-bold text-foreground no-underline hover:underline" />
+              ) : (
+                node.label
+              )}
             </h2>
 
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">
