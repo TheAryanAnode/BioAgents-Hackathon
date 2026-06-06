@@ -1,11 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Download, X } from "lucide-react";
+import { Download, Loader2, X } from "lucide-react";
 import type { HypothesisReport } from "../../lib/types";
-import { reportPdfBlob, REPORT_PDF_PREVIEW } from "../../lib/reportPdf";
+import {
+  htmlElementToPdfBlob,
+  REPORT_PDF_PREVIEW_MAX_WIDTH,
+  REPORT_PDF_PREVIEW_MIN_WIDTH,
+  sortReportSections,
+} from "../../lib/reportPdf";
 import { formatNumber, formatUsd } from "../../lib/utils";
 import { Button } from "../ui/Button";
 import { Badge, Card } from "../ui/Card";
+import { PdfCanvasPreview } from "./PdfCanvasPreview";
+import { ReportPrintSheet } from "./ReportPrintSheet";
 
 export function ReportModal({
   report,
@@ -14,17 +21,51 @@ export function ReportModal({
   report: HypothesisReport;
   onClose: () => void;
 }) {
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const printRef = useRef<HTMLDivElement>(null);
+  const previewPaneRef = useRef<HTMLDivElement>(null);
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(true);
+  const [previewWidth, setPreviewWidth] = useState(500);
 
-  const pdfBlob = useMemo(() => reportPdfBlob(report), [report]);
-
+  // Measure preview pane once on mount — avoid ResizeObserver loops.
   useEffect(() => {
-    const url = URL.createObjectURL(pdfBlob);
-    setPdfUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [pdfBlob]);
+    const pane = previewPaneRef.current;
+    if (!pane) return;
+    const w = pane.clientWidth - 32;
+    setPreviewWidth(
+      Math.min(REPORT_PDF_PREVIEW_MAX_WIDTH, Math.max(REPORT_PDF_PREVIEW_MIN_WIDTH, w)),
+    );
+  }, []);
+
+  // Generate PDF blob once from the off-screen print sheet.
+  useEffect(() => {
+    const el = printRef.current;
+    if (!el) return;
+
+    let cancelled = false;
+    setPdfBusy(true);
+
+    const timer = window.setTimeout(() => {
+      htmlElementToPdfBlob(el)
+        .then((blob) => {
+          if (!cancelled) {
+            setPdfBlob(blob);
+            setPdfBusy(false);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setPdfBusy(false);
+        });
+    }, 80);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [report]);
 
   const download = () => {
+    if (!pdfBlob) return;
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement("a");
     a.href = url;
@@ -34,6 +75,7 @@ export function ReportModal({
   };
 
   const metrics = report.keyMetrics ?? {};
+  const sections = sortReportSections(report.sections);
 
   return (
     <AnimatePresence>
@@ -44,6 +86,22 @@ export function ReportModal({
         className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 p-4 backdrop-blur"
         onClick={onClose}
       >
+        {/* Off-screen print source for PDF generation */}
+        <div
+          aria-hidden
+          style={{
+            position: "fixed",
+            left: -10000,
+            top: 0,
+            pointerEvents: "none",
+            opacity: 0,
+          }}
+        >
+          <div ref={printRef}>
+            <ReportPrintSheet report={report} />
+          </div>
+        </div>
+
         <motion.div
           initial={{ y: 16, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -66,8 +124,16 @@ export function ReportModal({
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Button size="sm" onClick={download}>
-                <Download size={14} strokeWidth={1.5} /> Download PDF
+              <Button size="sm" onClick={download} disabled={!pdfBlob || pdfBusy}>
+                {pdfBusy ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Building PDF
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} strokeWidth={1.5} /> Download PDF
+                  </>
+                )}
               </Button>
               <button
                 onClick={onClose}
@@ -79,7 +145,7 @@ export function ReportModal({
             </div>
           </div>
 
-          <div className="grid flex-1 min-h-0 grid-cols-1 overflow-hidden lg:grid-cols-2">
+          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-2">
             <div className="overflow-y-auto border-b border-border p-6 lg:border-b-0 lg:border-r">
               <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <MetricCard label="Funding" value={formatUsd(report.fundingEstimateUsd)} accent />
@@ -90,8 +156,12 @@ export function ReportModal({
               </div>
 
               <div className="flex flex-col gap-6">
-                {report.sections.map((section) => (
-                  <Card key={section.id} className="p-5">
+                {sections.map((section) => (
+                  <Card
+                    key={section.id}
+                    className={`p-5 ${section.id === "gaps" ? "border-accent bg-accent/5" : ""}`}
+                    accentTop={section.id === "gaps"}
+                  >
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <span className="label-mono">{section.title}</span>
                       {section.highlight && (
@@ -146,28 +216,16 @@ export function ReportModal({
             <div className="flex min-h-[320px] flex-col bg-muted/20 lg:min-h-0">
               <div className="border-b border-border px-4 py-3">
                 <span className="label-mono">PDF preview</span>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  This is the document that will download when you click Download PDF.
-                </p>
               </div>
-              <div className="relative flex-1 overflow-auto bg-[#525659] p-4">
-                {pdfUrl ? (
-                  <div className="mx-auto" style={{ width: REPORT_PDF_PREVIEW.width }}>
-                    <iframe
-                      title="Report PDF preview"
-                      src={`${pdfUrl}#toolbar=0&navpanes=0`}
-                      className="border border-border bg-white shadow-lg"
-                      style={{
-                        width: REPORT_PDF_PREVIEW.width,
-                        height: REPORT_PDF_PREVIEW.height,
-                        display: "block",
-                      }}
-                    />
+              <div ref={previewPaneRef} className="relative flex-1 overflow-auto bg-[#525659] p-4">
+                {pdfBusy && (
+                  <div className="flex h-full min-h-[280px] items-center justify-center gap-2">
+                    <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                    <span className="label-mono text-muted-foreground">Rendering PDF…</span>
                   </div>
-                ) : (
-                  <div className="flex h-full items-center justify-center">
-                    <span className="label-mono text-muted-foreground">Preparing preview…</span>
-                  </div>
+                )}
+                {!pdfBusy && pdfBlob && (
+                  <PdfCanvasPreview blob={pdfBlob} width={previewWidth} />
                 )}
               </div>
             </div>

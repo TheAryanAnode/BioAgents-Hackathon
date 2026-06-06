@@ -1,0 +1,10 @@
+[project]
+name = "synthesisos-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.vercel]
+entrypoint = "app.main:app"
+
+[tool.vercel.scripts]
+build = "python -c \"print('SynthesisOS backend ready')\""

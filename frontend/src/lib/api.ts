@@ -1,6 +1,20 @@
 import type { Hypothesis, HypothesisReport, SessionState } from "./types";
 
-const BASE = "/api";
+/**
+ * API base URL.
+ * - Local dev: empty → Vite proxy `/api`
+ * - Vercel experimentalServices: `/_/backend` (same origin)
+ * - Override: set VITE_API_URL in env
+ */
+function backendOrigin(): string {
+  const env = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+  if (env) return env;
+  if (import.meta.env.PROD) return "/_/backend";
+  return "";
+}
+
+const API_ROOT = backendOrigin();
+const BASE = API_ROOT ? `${API_ROOT}/api` : "/api";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -85,6 +99,12 @@ export const api = {
   },
 
   wsUrl(sessionId: string): string {
+    const wsEnv = import.meta.env.VITE_WS_URL?.replace(/\/$/, "");
+    if (wsEnv) return `${wsEnv}/ws/${sessionId}`;
+    if (import.meta.env.PROD) {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      return `${proto}://${location.host}/_/backend/ws/${sessionId}`;
+    }
     const proto = location.protocol === "https:" ? "wss" : "ws";
     return `${proto}://${location.host}/ws/${sessionId}`;
   },

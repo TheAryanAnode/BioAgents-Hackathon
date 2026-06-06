@@ -1,0 +1,28 @@
+# Backend API — deploy at https://render.com (free tier).
+# Pair with Vercel frontend; set VITE_API_URL / VITE_WS_URL in Vercel env vars.
+services:
+  - type: web
+    name: synthesisos-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.4"
+      - key: ALLOWED_ORIGINS
+        value: http://localhost:5173,http://127.0.0.1:5173
+      - key: ALLOW_ORIGIN_REGEX
+        value: "https://.*\\.vercel\\.app"
+      - key: GEMINI_USE_IN_PIPELINE
+        value: "false"
+      - key: GEMINI_USE_FOR_EMBEDDINGS
+        value: "false"
+      - key: DATA_DIR
+        value: /tmp/synthesisos/data
+      - key: UPLOAD_DIR
+        value: /tmp/synthesisos/uploads
+      - key: GOOGLE_API_KEY
+        sync: false

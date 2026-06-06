@@ -124,6 +124,25 @@ cd backend
 
 ---
 
+## Deploy (Vercel Services)
+
+Single-project deploy with **experimental Services** — frontend at `/`, FastAPI at `/_/backend`:
+
+```json
+{
+  "experimentalServices": {
+    "frontend": { "root": "frontend", "routePrefix": "/", "framework": "vite" },
+    "backend": { "root": "backend", "routePrefix": "/_/backend", "framework": "fastapi" }
+  }
+}
+```
+
+Set Vercel **Framework Preset → Services**, add `GOOGLE_API_KEY` (optional). See **[DEPLOY.md](./DEPLOY.md)**.
+
+Optional persistent backend: [Render](https://render.com) via `render.yaml` + `VITE_API_URL`.
+
+---
+
 ## Project layout
 
 ```

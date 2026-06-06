@@ -1,150 +1,93 @@
+import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
-import type { HypothesisReport } from "./types";
 
-const MARGIN = 54;
-const PAGE_W = 612; // letter width in pt
-const PAGE_H = 792;
-const CONTENT_W = PAGE_W - MARGIN * 2;
-const FOOTER_Y = PAGE_H - 36;
+const PAGE_W_PT = 612;
+const PAGE_H_PT = 792;
 
-/** Collapse odd whitespace / unicode that can confuse the PDF font engine. */
-function cleanText(text: string): string {
-  return text
-    .replace(/\u00a0/g, " ")
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201c\u201d]/g, '"')
-    .replace(/[\u2013\u2014]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim();
+function captureScale(): number {
+  const dpr = window.devicePixelRatio || 1;
+  return Math.min(4, Math.max(3, dpr * 2));
 }
 
-/**
- * Write wrapped text line-by-line. Passing a string[] to doc.text() can cause
- * horizontal stretching in some jsPDF builds — render one line at a time instead.
- */
-function writeBlock(
-  doc: jsPDF,
-  text: string,
-  x: number,
-  y: number,
-  maxW: number,
-  lineH: number,
-): number {
-  const cleaned = cleanText(text);
-  if (!cleaned) return y;
+/** Slice a tall canvas into letter-sized pages (top-to-bottom order). */
+function canvasToPdf(canvas: HTMLCanvasElement): jsPDF {
+  const pdf = new jsPDF({ unit: "pt", format: "letter", compress: false });
+  const pageHeightPx = Math.floor((PAGE_H_PT / PAGE_W_PT) * canvas.width);
+  let yPx = 0;
+  let pageIndex = 0;
 
-  const lines = doc.splitTextToSize(cleaned, maxW) as string[];
-  for (const line of lines) {
-    doc.text(line, x, y);
-    y += lineH;
+  while (yPx < canvas.height) {
+    const sliceH = Math.min(pageHeightPx, canvas.height - yPx);
+    const slice = document.createElement("canvas");
+    slice.width = canvas.width;
+    slice.height = sliceH;
+    const sctx = slice.getContext("2d");
+    if (!sctx) break;
+    sctx.fillStyle = "#ffffff";
+    sctx.fillRect(0, 0, slice.width, slice.height);
+    sctx.drawImage(canvas, 0, yPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+    const sliceHPt = (sliceH / canvas.width) * PAGE_W_PT;
+    if (pageIndex > 0) pdf.addPage();
+    pdf.addImage(
+      slice.toDataURL("image/png"),
+      "PNG",
+      0,
+      0,
+      PAGE_W_PT,
+      sliceHPt,
+      undefined,
+      "NONE",
+    );
+    yPx += pageHeightPx;
+    pageIndex += 1;
   }
-  return y;
+
+  return pdf;
 }
 
-function ensureSpace(doc: jsPDF, y: number, need: number): number {
-  if (y + need > FOOTER_Y) {
-    doc.addPage();
-    return MARGIN;
-  }
-  return y;
+/** Render a fixed-width HTML sheet to a multi-page letter PDF. */
+export async function htmlElementToPdfBlob(element: HTMLElement): Promise<Blob> {
+  const scale = captureScale();
+  const canvas = await html2canvas(element, {
+    scale,
+    backgroundColor: "#ffffff",
+    useCORS: true,
+    logging: false,
+    width: element.scrollWidth,
+    height: element.scrollHeight,
+    windowWidth: element.scrollWidth,
+    imageTimeout: 0,
+    removeContainer: true,
+  });
+
+  return canvasToPdf(canvas).output("blob");
 }
 
-/** Build a print-ready PDF matching SynthesisOS report structure. */
-export function buildReportPdf(report: HypothesisReport): jsPDF {
-  const doc = new jsPDF({ unit: "pt", format: "letter", compress: true });
-  let y = MARGIN;
+export const REPORT_PRINT_WIDTH_PX = 816;
+export const REPORT_PDF_PREVIEW_MIN_WIDTH = 420;
+export const REPORT_PDF_PREVIEW_MAX_WIDTH = 560;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
-  y = writeBlock(doc, report.title, MARGIN, y, CONTENT_W, 18) + 10;
+/** Preferred section order in PDF / print layout. */
+export const REPORT_SECTION_ORDER = [
+  "executive",
+  "gaps",
+  "mechanism",
+  "clinical",
+  "evidence",
+  "population",
+  "commercial",
+  "validation",
+  "budget",
+  "regulatory",
+  "risks",
+  "kpis",
+] as const;
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(80);
-  const meta = [
-    `Generated ${new Date(report.generatedAt).toLocaleDateString()}`,
-    `Funding est. $${report.fundingEstimateUsd.toLocaleString()}`,
-    `${report.patientPopulation.toLocaleString()} patients`,
-    report.timelineMonths ? `${report.timelineMonths} month timeline` : "",
-  ]
-    .filter(Boolean)
-    .join(" | ");
-  y = writeBlock(doc, meta, MARGIN, y, CONTENT_W, 12) + 14;
-  doc.setTextColor(0);
-
-  if (report.keyMetrics && Object.keys(report.keyMetrics).length) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    const metricLine = Object.entries(report.keyMetrics)
-      .map(([k, v]) => `${k.toUpperCase()}: ${v}`)
-      .join("   ");
-    y = writeBlock(doc, metricLine, MARGIN, y, CONTENT_W, 10) + 12;
-  }
-
-  for (const section of report.sections) {
-    y = ensureSpace(doc, y, 56);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
-    y = writeBlock(doc, section.title.toUpperCase(), MARGIN, y, CONTENT_W, 13) + 4;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    y = writeBlock(doc, section.body, MARGIN, y, CONTENT_W, 13) + 6;
-
-    if (section.bullets?.length) {
-      doc.setFontSize(9.5);
-      for (const b of section.bullets) {
-        y = ensureSpace(doc, y, 18);
-        y = writeBlock(doc, `- ${b}`, MARGIN + 10, y, CONTENT_W - 10, 12) + 2;
-      }
-    }
-
-    if (section.highlight) {
-      y = ensureSpace(doc, y, 14);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(180, 40, 0);
-      y = writeBlock(doc, section.highlight, MARGIN, y, CONTENT_W, 12) + 4;
-      doc.setTextColor(0);
-    }
-    y += 8;
-  }
-
-  if (report.references?.length) {
-    y = ensureSpace(doc, y, 36);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
-    y = writeBlock(doc, "REFERENCES", MARGIN, y, CONTENT_W, 13) + 4;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    for (const ref of report.references) {
-      y = ensureSpace(doc, y, 14);
-      const line = `[${ref.stance ?? "neutral"}] ${ref.title}${ref.url ? ` - ${ref.url}` : ""}`;
-      y = writeBlock(doc, line, MARGIN, y, CONTENT_W, 12) + 2;
-    }
-  }
-
-  const pageCount = doc.getNumberOfPages();
-  for (let p = 1; p <= pageCount; p++) {
-    doc.setPage(p);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(120);
-    doc.text("SynthesisOS - Autonomous Research Brief", MARGIN, FOOTER_Y);
-    doc.text(`${p} / ${pageCount}`, PAGE_W - MARGIN, FOOTER_Y, { align: "right" });
-  }
-  doc.setTextColor(0);
-
-  return doc;
+export function sortReportSections<T extends { id: string }>(sections: T[]): T[] {
+  const rank = new Map(REPORT_SECTION_ORDER.map((id, i) => [id, i]));
+  return [...sections].sort(
+    (a, b) => (rank.get(a.id as typeof REPORT_SECTION_ORDER[number]) ?? 99)
+      - (rank.get(b.id as typeof REPORT_SECTION_ORDER[number]) ?? 99),
+  );
 }
-
-export function reportPdfBlob(report: HypothesisReport): Blob {
-  const doc = buildReportPdf(report);
-  return doc.output("blob");
-}
-
-/** Letter-size preview dimensions (preserves 8.5:11 aspect ratio). */
-export const REPORT_PDF_PREVIEW = {
-  width: 480,
-  height: Math.round(480 * (792 / 612)),
-} as const;

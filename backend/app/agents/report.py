@@ -33,6 +33,16 @@ def _support_summary(h: Hypothesis) -> str:
 
 
 def _references(h: Hypothesis) -> list[ReportReference]:
+    seen: set[str] = set()
+    for e in h.evidence:
+        if e.paperId in seen:
+            continue
+        seen.add(e.paperId)
+        refs.append(ReportReference(title=e.title, url=e.url, stance=e.stance))
+    return refs
+
+
+def _references(h: Hypothesis) -> list[ReportReference]:
     refs: list[ReportReference] = []
     seen: set[str] = set()
     for e in h.evidence:
@@ -43,7 +53,60 @@ def _references(h: Hypothesis) -> list[ReportReference]:
     return refs
 
 
-def _fallback_sections(h: Hypothesis, opp, funding: int, query: str) -> list[ReportSection]:
+def _entity_kind(entity_type: dict[str, str], label: str) -> str:
+    from app.agents.lexicon import ENTITY_TYPE
+
+    return entity_type.get(label.lower(), ENTITY_TYPE.get(label.lower(), "concept"))
+
+
+def _knowledge_gaps_section(h: Hypothesis, ctx: AgentContext, query: str) -> ReportSection:
+    entity_type: dict[str, str] = ctx.work.get("entity_type", {})
+    entities = h.entities
+    a, bridge, b = (entities + ["?", "?", "?"])[:3]
+
+    targets: list[str] = []
+    for ent in entities:
+        kind = _entity_kind(entity_type, ent)
+        if kind in ("gene", "pathway"):
+            targets.append(f"{ent} ({kind})")
+
+    primary = next(
+        (e for e in entities if _entity_kind(entity_type, e) == "gene"),
+        bridge,
+    )
+    bridge_kind = _entity_kind(entity_type, bridge)
+    modality = (
+        "small-molecule or biologic pathway modulator"
+        if bridge_kind == "pathway"
+        else "gene-targeted therapy (ASO, siRNA, or biologic)"
+        if _entity_kind(entity_type, primary) == "gene"
+        else "phenotypic screen anchored to bridge biology"
+    )
+
+    return ReportSection(
+        id="gaps",
+        title="Knowledge Gaps & Drug Target Identification",
+        body=(
+            f'Literature synthesis on "{query}" exposes a structural knowledge gap: '
+            f"{a} and {b} repeatedly co-occur with {bridge} in the corpus but are never "
+            f"directly linked in primary papers—an open triangle indicative of unvalidated "
+            f"mechanistic whitespace. {primary} is prioritized as the lead intervention "
+            f"node because modulating this target may establish the missing {a}→{b} "
+            f"connection and translate into a druggable hypothesis."
+        ),
+        bullets=[
+            f"Gap type: open triangle — endpoints ({a}, {b}) lack direct citations despite shared bridge ({bridge}).",
+            f"Candidate targets: {', '.join(targets) if targets else primary}.",
+            f"Suggested modality: {modality}.",
+            "Target validation: genetic/functional perturbation + co-occurrence in ≥2 independent cohorts.",
+            "Whitespace signal: no approved therapy in corpus explicitly links this mechanistic axis.",
+            f"Biomarker hook: stratify on {bridge} activity or {primary} expression for trial enrichment.",
+        ],
+        highlight=f"Lead target: {primary}",
+    )
+
+
+def _fallback_sections(h: Hypothesis, ctx: AgentContext, opp, funding: int, query: str) -> list[ReportSection]:
     support = [e for e in h.evidence if e.stance == "support"]
     contradict = [e for e in h.evidence if e.stance == "contradict"]
     entity_chain = " → ".join(h.entities) if h.entities else "N/A"
@@ -64,6 +127,7 @@ def _fallback_sections(h: Hypothesis, opp, funding: int, query: str) -> list[Rep
             ),
             highlight=f"${funding:,} validation budget · {pop:,} patients",
         ),
+        _knowledge_gaps_section(h, ctx, query),
         ReportSection(
             id="mechanism",
             title="Scientific Hypothesis & Mechanistic Rationale",
@@ -244,6 +308,7 @@ Return JSON ONLY:
   "keyMetrics": {{"confidence": "...", "patients": "...", "funding": "...", "roi": "...", "timeline": "..."}},
   "sections": [
     {{"id": "executive", "title": "Executive Summary", "body": "2-4 sentences", "bullets": [], "highlight": "key figure"}},
+    {{"id": "gaps", "title": "Knowledge Gaps & Drug Target Identification", "body": "Describe the open-triangle knowledge gap and prioritize druggable targets (genes/pathways) with modality suggestions", "bullets": ["gap type", "lead target", "modality", "validation"], "highlight": "lead target name"}},
     {{"id": "mechanism", "title": "Scientific Hypothesis & Mechanistic Rationale", "body": "...", "bullets": ["..."], "highlight": ""}},
     {{"id": "clinical", "title": "Clinical Significance & Healthcare Impact", "body": "...", "bullets": ["..."], "highlight": ""}},
     {{"id": "evidence", "title": "Evidence Assessment", "body": "...", "bullets": ["..."], "highlight": ""}},
@@ -278,8 +343,12 @@ Be specific, quantitative where possible, and actionable. Note uncertainties exp
             key_metrics = {str(k): str(v) for k, v in (data.get("keyMetrics") or {}).items()}
             timeline = int(data.get("timelineMonths", 18))
 
+    if sections and not any(s.id == "gaps" for s in sections):
+        idx = next((i for i, s in enumerate(sections) if s.id == "executive"), -1)
+        sections.insert(idx + 1, _knowledge_gaps_section(h, ctx, ctx.query))
+
     if not sections:
-        sections = _fallback_sections(h, opp, funding, ctx.query)
+        sections = _fallback_sections(h, ctx, opp, funding, ctx.query)
         key_metrics = {
             "confidence": f"{h.confidence}%",
             "patients": f"{pop:,}",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from pathlib import Path
 
@@ -51,8 +52,11 @@ async def start_research(req: ResearchRequest):
         raise HTTPException(400, "query is required")
     session_id = uuid.uuid4().hex[:12]
     session = store.create(session_id, req.query.strip())
-    # Kick off the pipeline in the background; the client streams via WebSocket.
-    asyncio.create_task(run_pipeline(session))
+    # Serverless (Vercel): await pipeline — background tasks are killed after response.
+    if os.getenv("VERCEL"):
+        await run_pipeline(session)
+    else:
+        asyncio.create_task(run_pipeline(session))
     return {"sessionId": session_id}
 
 
