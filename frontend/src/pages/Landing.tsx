@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
+import { SynthesisLogo } from "../components/ui/SynthesisLogo";
 
 const EXAMPLES = [
   "autism genomics",
@@ -37,6 +38,10 @@ export function Landing({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.25, 0, 0, 1] }}
         >
+          <div className="mb-10">
+            <SynthesisLogo size="hero" />
+          </div>
+
           <div className="mb-6 flex items-center gap-3">
             <span className="h-1 w-16 bg-accent" />
             <span className="label-mono">Track 02 — Autonomous Research</span>
@@ -110,7 +115,7 @@ export function Landing({
           />
           <span className="label-mono">
             {geminiLive
-              ? "Gemini reasoning engine online"
+              ? "Gemini on demand — chat, hypothesis click, & reports only"
               : "Demo mode — deterministic synthesis (no API key)"}
           </span>
         </motion.div>

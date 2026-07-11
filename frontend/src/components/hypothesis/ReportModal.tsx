@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Download, Loader2, X } from "lucide-react";
-import type { HypothesisReport } from "../../lib/types";
+import type { Hypothesis, HypothesisReport } from "../../lib/types";
 import {
   htmlElementToPdfBlob,
   REPORT_PDF_PREVIEW_MAX_WIDTH,
@@ -13,12 +13,15 @@ import { Button } from "../ui/Button";
 import { Badge, Card } from "../ui/Card";
 import { PdfCanvasPreview } from "./PdfCanvasPreview";
 import { ReportPrintSheet } from "./ReportPrintSheet";
+import { ScientificWhiteboard } from "./ScientificWhiteboard";
 
 export function ReportModal({
   report,
+  hypothesis,
   onClose,
 }: {
   report: HypothesisReport;
+  hypothesis?: Hypothesis;
   onClose: () => void;
 }) {
   const printRef = useRef<HTMLDivElement>(null);
@@ -154,6 +157,12 @@ export function ReportModal({
                 <MetricCard label="ROI" value={metrics.roi ?? "—"} />
                 <MetricCard label="Timeline" value={metrics.timeline ?? `${report.timelineMonths ?? 18} mo`} />
               </div>
+
+              {hypothesis && (
+                <div className="mb-6">
+                  <ScientificWhiteboard hypothesis={hypothesis} />
+                </div>
+              )}
 
               <div className="flex flex-col gap-6">
                 {sections.map((section) => (

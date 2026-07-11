@@ -56,6 +56,18 @@ export const api = {
     );
   },
 
+  /** One Gemini call — only when user explicitly selects a hypothesis. */
+  async enrichHypothesis(
+    sessionId: string,
+    hypothesisId: string,
+  ): Promise<Hypothesis> {
+    return json(
+      await fetch(`${BASE}/sessions/${sessionId}/hypotheses/${hypothesisId}/enrich`, {
+        method: "POST",
+      }),
+    );
+  },
+
   async chat(
     sessionId: string,
     message: string,

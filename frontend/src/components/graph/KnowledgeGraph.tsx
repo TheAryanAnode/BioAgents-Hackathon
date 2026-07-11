@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { useStore } from "../../stores/useStore";
 import type { GraphLink, GraphNode } from "../../lib/types";
+import {
+  GRAPH_COLORS,
+  drawNodeCore,
+  drawNodeGlow,
+  linkEndpointId,
+} from "../../lib/graphEffects";
 
 const TYPE_BASE_SIZE: Record<string, number> = {
   concept: 7,
@@ -9,10 +15,10 @@ const TYPE_BASE_SIZE: Record<string, number> = {
   author: 3,
 };
 
-const ACCENT = "#FF3D00";
-const FG = "#FAFAFA";
-const MUTED = "#737373";
-const SUPPORT = "#34D399";
+const ACCENT = GRAPH_COLORS.accent;
+const FG = GRAPH_COLORS.fg;
+const MUTED = GRAPH_COLORS.muted;
+const SUPPORT = GRAPH_COLORS.support;
 
 export function KnowledgeGraph({
   filter,
@@ -118,10 +124,22 @@ export function KnowledgeGraph({
           }}
           linkLineDash={(l: any) => (l.kind === "conceptual" ? [3, 3] : null)}
           linkWidth={(l: any) => {
-            const s = typeof l.source === "object" ? l.source.id : l.source;
-            const t = typeof l.target === "object" ? l.target.id : l.target;
-            return focusSet && (focusSet.has(s) || focusSet.has(t)) ? 1.2 : 0.5;
+            const s = linkEndpointId(l, "source");
+            const t = linkEndpointId(l, "target");
+            const focused = focusSet && (focusSet.has(s) || focusSet.has(t));
+            if (l.kind === "conceptual") return focused ? 1.6 : 0.8;
+            return focused ? 1.2 : 0.5;
           }}
+          linkDirectionalParticles={(l: any) => {
+            const s = linkEndpointId(l, "source");
+            const t = linkEndpointId(l, "target");
+            const focused = focusSet && (focusSet.has(s) || focusSet.has(t));
+            if (l.kind === "conceptual") return focused ? 5 : 3;
+            return focused ? 2 : 1;
+          }}
+          linkDirectionalParticleSpeed={0.004}
+          linkDirectionalParticleWidth={2}
+          linkDirectionalParticleColor={() => "rgba(255,61,0,0.9)"}
           onNodeClick={(n: any) => {
             selectNode(n as GraphNode);
             fgRef.current?.centerAt(n.x, n.y, 600);
@@ -135,16 +153,18 @@ export function KnowledgeGraph({
             const r = base + (n.centrality ?? 0) * 8;
             const dim = focusSet ? !focusSet.has(n.id) : false;
 
-            let color = MUTED;
+            let color: string = MUTED;
             if (n.type === "concept") color = ACCENT;
             else if (n.type === "paper") color = n.source === "user_pdf" ? SUPPORT : FG;
             else color = MUTED;
 
+            if (!dim) {
+              const glowIntensity =
+                n.type === "concept" ? "high" : n.source === "user_pdf" ? "medium" : "low";
+              drawNodeGlow(ctx, n.x, n.y, r, color, scale, glowIntensity);
+            }
             ctx.globalAlpha = dim ? 0.18 : 1;
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
+            drawNodeCore(ctx, n.x, n.y, r, color, dim ? 0.18 : 1);
 
             // User-uploaded papers get a ring to signal provenance.
             if (n.source === "user_pdf") {

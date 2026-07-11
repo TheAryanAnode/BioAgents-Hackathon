@@ -38,8 +38,7 @@ class AnalysisAgent:
         with timer() as t:
             for p in papers:
                 ents = None
-                if ctx.llm.pipeline_llm_allowed:
-                    ents = self._entities_llm(ctx, p)
+                # Entity extraction always uses lexicon in pipeline — no Gemini spend.
                 if not ents:
                     ents = extract_entities(f"{p.title}. {p.abstract}")
                 paper_entities[p.id] = ents

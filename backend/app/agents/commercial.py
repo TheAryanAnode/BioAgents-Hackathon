@@ -52,14 +52,7 @@ class CommercialAgent:
             f"{whitespace}/100 competitive whitespace suggests an under-served "
             f"opportunity of ~{population:,} patients."
         )
-        if ctx.llm.pipeline_llm_allowed:
-            text = ctx.llm.complete(
-                "In one sentence, give the commercial rationale for pursuing this "
-                f"hypothesis as a drug-development opportunity: {h.statement}"
-            )
-            if text:
-                rationale = text.strip()[:300]
-
+        # Commercial copy stays heuristic — no pipeline Gemini spend.
         funding = 250_000 + min(population // 50, 3_500_000) + unmet * 8_000
 
         return HypothesisOpportunity(

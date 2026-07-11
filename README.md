@@ -22,7 +22,7 @@ It is built to serve three stakeholders at once:
 - **Autonomous, not just search.** The hypothesis agent finds *open triangles* in the knowledge graph — pairs of well-connected concepts that the literature never directly links — and proposes testable mechanisms a keyword search would never surface.
 - **Private corpus + public literature in one layer.** Uploaded PDFs are parsed, embedded, and merged into the *same* vector index and knowledge graph as API-fetched papers, so they immediately participate in hypotheses, evidence, and chat citations.
 - **Radical transparency.** Every agent action streams to a live, exportable audit log over WebSocket.
-- **Runs with or without an API key.** With a Google Gemini key it uses Gemini for extraction, classification, and Q&A. Without one, it falls back to deterministic heuristics and a curated corpus so the demo *always* works offline.
+- **Runs with or without an API key.** With a Google Gemini key, Gemini is used only for chat, clicking a hypothesis, and full reports. The auto pipeline always uses fast heuristics so your quota is not burned on graph build.
 - **Bold Typography design system.** A confident, editorial dark UI — sharp edges, extreme type scale, a single vermillion accent.
 
 ---
@@ -46,7 +46,7 @@ The multi-agent pipeline:
 | Agent | Responsibility |
 |-------|----------------|
 | Ingestion | Fetch papers (S2 / PubMed / arXiv) + ingest user PDFs; chunk and embed into the corpus |
-| Analysis | Extract biomedical entities and relations (Gemini, or a domain lexicon fallback) |
+| Analysis | Extract biomedical entities and relations (domain lexicon — no Gemini in pipeline) |
 | Graph Builder | Build the NetworkX graph, compute centrality, detect clusters, export to the client |
 | Hypothesis | Detect structural gaps (open triangles) and generate testable hypotheses |
 | Evidence | Retrieve relevant chunks, classify stance (support / contradict / neutral), score confidence over time |
@@ -96,11 +96,9 @@ Open http://localhost:5173. The Vite dev server proxies `/api` and `/ws` to the 
 **If you see `vite: command not found`:** your environment may skip devDependencies (e.g. `NODE_ENV=production`). Run `npm install --include=dev` (or `NODE_ENV=development npm install`). The `npm run` scripts invoke Vite via `node ./node_modules/vite/...` so a working `node` is enough once `vite` is installed.
 
 > No API key? Everything still runs in deterministic demo mode. Add a
-> `GOOGLE_API_KEY` to `backend/.env` to enable Gemini for **chat** and **reports**.
+> Add `GOOGLE_API_KEY` to `backend/.env` to enable Gemini for **chat**, **hypothesis click** (1 call each), and **full reports** only.
 >
-> **Free-tier rate limits:** Gemini free tier allows ~5 requests/minute. By default
-> `GEMINI_USE_IN_PIPELINE=false` so the research graph/hypothesis pipeline uses
-> fast heuristics and does not burn your quota. Chat and “Generate full report” use Gemini.
+> **Free-tier rate limits:** Gemini free tier allows ~5 requests/minute. The research pipeline (graph, hypotheses, evidence) never calls Gemini — only user-initiated chat, selecting a hypothesis, and “Generate full report”.
 
 ---
 

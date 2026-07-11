@@ -122,6 +122,7 @@ class Hypothesis(BaseModel):
     confidenceExplanation: str = ""
     confidenceBreakdown: Optional[ConfidenceBreakdown] = None
     opportunity: Optional[HypothesisOpportunity] = None
+    geminiEnriched: bool = False
 
 
 class ReportSection(BaseModel):

@@ -1,8 +1,12 @@
 """Thin Gemini wrapper. Returns ``None`` when unavailable so callers fall back
 to deterministic heuristics — the app must work without an API key.
 
-Free-tier Gemini is ~5 requests/minute. The bulk pipeline therefore avoids
-LLM calls by default; chat and on-demand report generation use the budget.
+Free-tier Gemini is ~5 requests/minute. Gemini is used ONLY for:
+- chat messages (user-initiated)
+- clicking a hypothesis (one call per hypothesis, once)
+- generating a full investment report
+
+The research pipeline (graph, evidence, hypotheses) always uses heuristics.
 """
 
 from __future__ import annotations

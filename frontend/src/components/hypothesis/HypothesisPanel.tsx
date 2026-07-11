@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,22 +17,51 @@ import { Badge, Card } from "../ui/Card";
 import { PaperLink } from "../ui/PaperLink";
 import { cn, formatNumber, formatUsd, SOURCE_LABEL } from "../../lib/utils";
 import type { EvidenceItem, Hypothesis, HypothesisReport } from "../../lib/types";
+import { AlertTriangle } from "lucide-react";
 import { ConfidenceExplainer } from "./ConfidenceExplainer";
 import { HypothesisMiniGraph } from "./HypothesisMiniGraph";
 import { ReportModal } from "./ReportModal";
+import { ScientificWhiteboard } from "./ScientificWhiteboard";
 
 export function HypothesisPanel() {
   const hypotheses = useStore((s) => s.hypotheses);
   const selectedId = useStore((s) => s.selectedHypothesisId);
   const select = useStore((s) => s.selectHypothesis);
   const sessionId = useStore((s) => s.sessionId);
+  const geminiLive = useStore((s) => s.geminiLive);
   const applyEvent = useStore((s) => s.applyEvent);
   const [busy, setBusy] = useState(false);
+  const [enrichBusy, setEnrichBusy] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
   const [report, setReport] = useState<HypothesisReport | null>(null);
+  const enrichingRef = useRef<string | null>(null);
 
   const selected =
     hypotheses.find((h) => h.id === selectedId) ?? hypotheses[0] ?? null;
+
+  /** Gemini runs only when the user explicitly clicks a hypothesis card. */
+  const selectHypothesis = async (id: string) => {
+    select(id);
+    const h = hypotheses.find((x) => x.id === id);
+    if (!sessionId || !h || h.geminiEnriched || !geminiLive) return;
+    if (enrichingRef.current === id) return;
+
+    enrichingRef.current = id;
+    setEnrichBusy(true);
+    try {
+      const enriched = await api.enrichHypothesis(sessionId, id);
+      const latest = useStore.getState().hypotheses;
+      applyEvent({
+        type: "hypotheses",
+        payload: latest.map((x) => (x.id === id ? enriched : x)),
+      });
+    } catch {
+      /* keep heuristic version */
+    } finally {
+      enrichingRef.current = null;
+      setEnrichBusy(false);
+    }
+  };
 
   const generate = async () => {
     if (!sessionId) return;
@@ -39,7 +69,7 @@ export function HypothesisPanel() {
     try {
       const h = await api.generateHypothesis(sessionId);
       applyEvent({ type: "hypotheses", payload: [...hypotheses, h] });
-      select(h.id);
+      select(h.id); // heuristic only — no Gemini until user clicks the card
     } finally {
       setBusy(false);
     }
@@ -88,7 +118,7 @@ export function HypothesisPanel() {
             {hypotheses.map((h, i) => (
               <button
                 key={h.id}
-                onClick={() => select(h.id)}
+                onClick={() => void selectHypothesis(h.id)}
                 className={cn(
                   "border p-4 text-left transition-colors",
                   selected?.id === h.id
@@ -126,6 +156,8 @@ export function HypothesisPanel() {
             hypothesis={selected}
             onGenerateReport={generateReport}
             reportBusy={reportBusy}
+            enrichBusy={enrichBusy}
+            geminiLive={geminiLive}
           />
         ) : (
           <div className="flex h-full items-center justify-center">
@@ -134,7 +166,9 @@ export function HypothesisPanel() {
         )}
       </div>
 
-      {report && <ReportModal report={report} onClose={() => setReport(null)} />}
+      {report && selected && (
+        <ReportModal report={report} hypothesis={selected} onClose={() => setReport(null)} />
+      )}
     </div>
   );
 }
@@ -143,10 +177,14 @@ function HypothesisDetail({
   hypothesis,
   onGenerateReport,
   reportBusy,
+  enrichBusy,
+  geminiLive,
 }: {
   hypothesis: Hypothesis;
   onGenerateReport: () => void;
   reportBusy: boolean;
+  enrichBusy: boolean;
+  geminiLive: boolean;
 }) {
   const support = hypothesis.evidence.filter((e) => e.stance === "support");
   const contradict = hypothesis.evidence.filter((e) => e.stance === "contradict");
@@ -154,6 +192,24 @@ function HypothesisDetail({
 
   return (
     <div className="space-y-8 p-6 md:p-8">
+      {enrichBusy && geminiLive && (
+        <div className="flex items-center gap-2 border border-border bg-muted/30 px-4 py-3">
+          <Loader2 size={14} className="animate-spin text-accent" />
+          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Analyzing with Gemini (1 request)…
+          </span>
+        </div>
+      )}
+      {!enrichBusy && hypothesis.geminiEnriched && (
+        <p className="font-mono text-[10px] uppercase tracking-widest text-support">
+          Gemini-enriched · evidence stances refined
+        </p>
+      )}
+      {!hypothesis.geminiEnriched && geminiLive && !enrichBusy && (
+        <p className="text-xs text-muted-foreground">
+          Heuristic preview — select this hypothesis to refine with Gemini (1 API call).
+        </p>
+      )}
       <div>
         <div className="mb-2 flex items-center gap-3">
           <span className="h-1 w-10 bg-accent" />
@@ -176,15 +232,38 @@ function HypothesisDetail({
 
       <ConfidenceExplainer hypothesis={hypothesis} />
 
+      {contradict.length > 0 && (
+        <ConflictAlert
+          count={contradict.length}
+          penalty={hypothesis.confidenceBreakdown?.contradictPenalty}
+          confidence={hypothesis.confidence}
+        />
+      )}
+
+      <div>
+        <span className="label-mono">Confidence trajectory</span>
+        <p className="mt-1 mb-3 text-xs text-muted-foreground">
+          {contradict.length > 0
+            ? "Solid line = current score · dashed = pre-conflict baseline · red zone = decay from conflicting studies"
+            : "Evidence-weighted confidence over the literature timeline"}
+        </p>
+        <ConfidenceDecayChart hypothesis={hypothesis} />
+      </div>
+
+      <ScientificWhiteboard hypothesis={hypothesis} />
+
       <div>
         <span className="label-mono">Structural gap (mini graph)</span>
         <p className="mt-2 mb-3 text-sm text-muted-foreground">
-          Only the three gap concepts and papers that directly connect them (≥2 shared entities) — not the full corpus graph.
+          Gap concepts (glowing) and connecting papers.{" "}
+          <span className="text-support">Green</span> = supporting ·{" "}
+          <span className="text-[#F87171]">Red</span> = conflicting evidence edges.
         </p>
         <HypothesisMiniGraph
           data={hypothesis.subgraph ?? { nodes: [], links: [], clusters: [] }}
           gapNodeIds={hypothesis.gapNodeIds}
           entities={hypothesis.entities}
+          evidence={hypothesis.evidence}
         />
       </div>
 
@@ -279,6 +358,132 @@ function ConfidenceMeter({ value }: { value: number }) {
         <div className="h-full bg-accent" style={{ width: `${value}%` }} />
       </div>
       <span className="font-mono text-xs text-foreground">{value}%</span>
+    </div>
+  );
+}
+
+function ConflictAlert({
+  count,
+  penalty,
+  confidence,
+}: {
+  count: number;
+  penalty?: number;
+  confidence: number;
+}) {
+  const baseline = penalty ? Math.min(95, confidence + penalty) : confidence;
+  return (
+    <div className="flex gap-4 border border-[#F87171]/40 bg-[#F87171]/5 p-4">
+      <AlertTriangle size={20} className="mt-0.5 shrink-0 text-[#F87171]" strokeWidth={1.5} />
+      <div>
+        <p className="text-sm font-semibold text-[#F87171]">
+          This hypothesis is weakened because {count} {count === 1 ? "study conflicts" : "studies conflict"}.
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Conflicting evidence reduces confidence
+          {penalty ? ` by −${penalty} pts` : ""} (from ~{baseline}% to {confidence}%).
+          Red edges in the mini-graph mark contradicting paper links.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ConfidenceDecayChart({ hypothesis }: { hypothesis: Hypothesis }) {
+  const bd = hypothesis.confidenceBreakdown;
+  const contradictCount = bd?.contradictCount ?? 0;
+  const penalty = bd?.contradictPenalty ?? 0;
+  const history = hypothesis.history.length
+    ? hypothesis.history
+    : [{ t: "Now", confidence: hypothesis.confidence }];
+
+  const data = history.map((p, i) => {
+    const progress = history.length > 1 ? i / (history.length - 1) : 1;
+    const decayStart = 0.35;
+    const peak = Math.min(95, hypothesis.confidence + penalty);
+
+    let actual = p.confidence;
+    let baseline = peak;
+    if (contradictCount > 0) {
+      if (progress >= decayStart) {
+        const t = (progress - decayStart) / (1 - decayStart);
+        actual = Math.round(peak - penalty * t);
+      } else {
+        actual = peak;
+      }
+    }
+
+    return {
+      t: p.t,
+      actual,
+      baseline,
+      decay: contradictCount > 0 && actual < baseline ? actual : null,
+    };
+  });
+
+  return (
+    <div className="h-36">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: -28 }}>
+          <defs>
+            <linearGradient id="decayGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#F87171" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="#F87171" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="confGradDetail" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#FF3D00" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="#FF3D00" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="#262626" vertical={false} />
+          <XAxis
+            dataKey="t"
+            tick={{ fill: "#737373", fontSize: 9, fontFamily: "JetBrains Mono" }}
+            stroke="#262626"
+          />
+          <YAxis
+            domain={[0, 100]}
+            tick={{ fill: "#737373", fontSize: 9, fontFamily: "JetBrains Mono" }}
+            stroke="#262626"
+          />
+          <Tooltip
+            contentStyle={{
+              background: "#0F0F0F",
+              border: "1px solid #262626",
+              borderRadius: 0,
+              fontFamily: "JetBrains Mono",
+              fontSize: 11,
+            }}
+          />
+          {contradictCount > 0 && (
+            <>
+              <Area
+                type="monotone"
+                dataKey="decay"
+                stroke="#F87171"
+                strokeWidth={2}
+                fill="url(#decayGrad)"
+                connectNulls={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="baseline"
+                stroke="#737373"
+                strokeWidth={1.5}
+                strokeDasharray="5 4"
+                dot={false}
+              />
+            </>
+          )}
+          <Area
+            type="monotone"
+            dataKey="actual"
+            stroke="#FF3D00"
+            strokeWidth={2}
+            fill={contradictCount > 0 ? "transparent" : "url(#confGradDetail)"}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }

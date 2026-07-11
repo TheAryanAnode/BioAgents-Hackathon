@@ -85,8 +85,7 @@ export function ChatPanel() {
         {chat.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <p className="max-w-md text-lg leading-normal text-muted-foreground">
-              Ask anything about your synthesized literature — or broader biomedical questions.
-              Answers prioritize your corpus and use Gemini when configured.
+              Ask about your synthesized literature. Each message uses one Gemini request when configured.
             </p>
             <div className="mt-8 flex flex-col items-center gap-3">
               {SUGGESTIONS.map((s) => (

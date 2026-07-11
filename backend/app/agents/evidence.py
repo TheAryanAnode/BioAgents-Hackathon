@@ -114,8 +114,7 @@ class EvidenceAgent:
             snippet = hit["document"][:240]
             full_text = f"{rec.title} {rec.abstract}" if rec else hit["document"]
             stance = None
-            if ctx.llm.pipeline_llm_allowed:
-                stance = self._stance_llm(ctx, h.statement, snippet)
+            # Stance LLM only via on-demand enrich endpoint — pipeline uses heuristics.
             if stance is None:
                 stance, blended = _heuristic_stance(h.entities, full_text, hit["relevance"])
             else:

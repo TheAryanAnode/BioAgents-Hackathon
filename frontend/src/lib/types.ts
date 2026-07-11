@@ -96,6 +96,7 @@ export interface Hypothesis {
   confidenceExplanation?: string;
   confidenceBreakdown?: ConfidenceBreakdown;
   opportunity?: HypothesisOpportunity;
+  geminiEnriched?: boolean;
 }
 
 export interface ReportSection {

@@ -33,16 +33,6 @@ def _support_summary(h: Hypothesis) -> str:
 
 
 def _references(h: Hypothesis) -> list[ReportReference]:
-    seen: set[str] = set()
-    for e in h.evidence:
-        if e.paperId in seen:
-            continue
-        seen.add(e.paperId)
-        refs.append(ReportReference(title=e.title, url=e.url, stance=e.stance))
-    return refs
-
-
-def _references(h: Hypothesis) -> list[ReportReference]:
     refs: list[ReportReference] = []
     seen: set[str] = set()
     for e in h.evidence:
@@ -51,6 +41,50 @@ def _references(h: Hypothesis) -> list[ReportReference]:
         seen.add(e.paperId)
         refs.append(ReportReference(title=e.title, url=e.url, stance=e.stance))
     return refs
+
+
+def _lead_target(h: Hypothesis, ctx: AgentContext) -> str:
+    entity_type: dict[str, str] = ctx.work.get("entity_type", {})
+    for ent in h.entities:
+        if _entity_kind(entity_type, ent) == "gene":
+            return ent
+    if len(h.entities) > 1:
+        return h.entities[1]
+    return h.entities[0] if h.entities else "lead target"
+
+
+def _report_title(h: Hypothesis, ctx: AgentContext, query: str) -> str:
+    """Descriptive fallback title — names the gap, target, and research domain."""
+    entities = h.entities
+    a, bridge, b = (entities + ["", "", ""])[:3]
+    primary = _lead_target(h, ctx)
+    opp = h.opportunity
+    subgroup = opp.subgroup if opp else query
+    status_note = f" ({h.status}, {h.confidence}% confidence)" if h.confidence else ""
+
+    if len(entities) >= 3 and a and b and bridge:
+        return (
+            f"Investment Brief: Modulating {primary} to Link {a} and {b} "
+            f"via {bridge} — {subgroup}{status_note}"
+        )
+    if h.statement:
+        stmt = h.statement.strip()
+        if len(stmt) > 100:
+            stmt = stmt[:97].rsplit(" ", 1)[0] + "…"
+        return f"Investment Brief: {stmt} — {query}"
+    return f"Research & Investment Brief: {query} — Hypothesis {h.id}"
+
+
+def _normalize_title(title: str, fallback: str) -> str:
+    cleaned = " ".join(title.split()).strip()
+    if len(cleaned) < 24 or cleaned.lower() in (
+        "short report title",
+        "investment brief",
+        "research brief",
+        "report",
+    ):
+        return fallback
+    return cleaned[:220]
 
 
 def _entity_kind(entity_type: dict[str, str], label: str) -> str:
@@ -275,7 +309,7 @@ async def generate(ctx: AgentContext, h: Hypothesis) -> HypothesisReport:
         f"- [{e.stance}] {e.title} ({e.url or 'no url'}): {e.snippet[:160]}"
         for e in h.evidence[:10]
     )
-    title = f"Research & Investment Brief — {h.entities[0] if h.entities else h.id}"
+    title = _report_title(h, ctx, ctx.query)
 
     sections: list[ReportSection] | None = None
     key_metrics: dict[str, str] = {}
@@ -303,7 +337,7 @@ COMMERCIAL:
 
 Return JSON ONLY:
 {{
-  "title": "short report title",
+  "title": "Specific descriptive title (12–22 words): name the mechanistic hypothesis, lead drug target or pathway, patient subgroup or disease context, and core investment thesis. Do NOT use generic labels like 'Investment Brief' alone.",
   "timelineMonths": 18,
   "keyMetrics": {{"confidence": "...", "patients": "...", "funding": "...", "roi": "...", "timeline": "..."}},
   "sections": [
@@ -339,7 +373,7 @@ Be specific, quantitative where possible, and actionable. Note uncertainties exp
                     )
                 )
             if data.get("title"):
-                title = str(data["title"])
+                title = _normalize_title(str(data["title"]), title)
             key_metrics = {str(k): str(v) for k, v in (data.get("keyMetrics") or {}).items()}
             timeline = int(data.get("timelineMonths", 18))
 

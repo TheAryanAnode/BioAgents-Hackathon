@@ -79,21 +79,16 @@ class HypothesisAgent:
         return None
 
     def _build(self, ctx: AgentContext, a: str, b: str, bridge: str) -> Hypothesis:
-        gen = None
-        if ctx.llm.pipeline_llm_allowed:
-            gen = self._statement_llm(ctx, a, b, bridge)
-        if gen:
-            statement, rationale = gen["statement"], gen.get("rationale", "")
-        else:
-            statement = (
-                f"{a} contributes to {b} through {bridge}, a connection not yet "
-                f"directly established in the literature."
-            )
-            rationale = (
-                f"Both {a} and {b} co-occur with {bridge} across the corpus, yet no "
-                f"paper directly links {a} to {b}. This open triangle suggests {bridge} "
-                f"may be the mechanistic bridge between them."
-            )
+        # Heuristic only — Gemini runs on explicit hypothesis click (enrich endpoint).
+        statement = (
+            f"{a} contributes to {b} through {bridge}, a connection not yet "
+            f"directly established in the literature."
+        )
+        rationale = (
+            f"Both {a} and {b} co-occur with {bridge} across the corpus, yet no "
+            f"paper directly links {a} to {b}. This open triangle suggests {bridge} "
+            f"may be the mechanistic bridge between them."
+        )
         entities = [a, bridge, b]
         concept_ids: dict[str, str] = ctx.work.get("concept_ids", {})
         gap_ids = [concept_ids[e] for e in entities if concept_ids.get(e)]
