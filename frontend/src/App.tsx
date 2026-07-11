@@ -7,17 +7,17 @@ export default function App() {
   const setSession = useStore((s) => s.setSession);
   const setQuery = useStore((s) => s.setQuery);
   const setRunning = useStore((s) => s.setRunning);
-  const setGemini = useStore((s) => s.setGemini);
+  const setLlm = useStore((s) => s.setLlm);
   const setView = useStore((s) => s.setView);
   const reset = useStore((s) => s.reset);
-  const geminiLive = useStore((s) => s.geminiLive);
+  const llmLive = useStore((s) => s.llmLive);
 
   useEffect(() => {
     api
       .health()
-      .then((h) => setGemini(h.gemini, h.geminiQuotaExhausted))
-      .catch(() => setGemini(false));
-  }, [setGemini]);
+      .then((h) => setLlm(h.llm, h.llmQuotaExhausted, h.llmModel))
+      .catch(() => setLlm(false));
+  }, [setLlm]);
 
   // Pointer-reactive aurora: drive the radial-gradient origin from the cursor.
   // rAF-throttled and writes two CSS vars only — negligible cost.
@@ -61,7 +61,7 @@ export default function App() {
     <div className="grain min-h-screen">
       <div className="aurora" aria-hidden />
       <div className="aurora-scrim" aria-hidden />
-      <Workspace onStart={start} geminiLive={geminiLive} />
+      <Workspace onStart={start} llmLive={llmLive} />
     </div>
   );
 }

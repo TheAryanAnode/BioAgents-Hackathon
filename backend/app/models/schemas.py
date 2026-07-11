@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 SourceType = Literal[
     "semantic_scholar", "pubmed", "arxiv", "user_pdf", "derived",
@@ -185,7 +185,10 @@ class Hypothesis(BaseModel):
     confidenceExplanation: str = ""
     confidenceBreakdown: Optional[ConfidenceBreakdown] = None
     opportunity: Optional[HypothesisOpportunity] = None
-    geminiEnriched: bool = False
+    llmEnriched: bool = Field(
+        False,
+        validation_alias=AliasChoices("llmEnriched", "geminiEnriched"),
+    )
     craftInvestigated: bool = False
     investigation: Optional[InvestigationResult] = None
 

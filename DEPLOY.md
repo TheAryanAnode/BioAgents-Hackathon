@@ -22,9 +22,9 @@ Add in Vercel → **Settings → Environment Variables** (Production + Preview):
 
 | Variable | Required | Notes |
 |----------|----------|-------|
-| `GOOGLE_API_KEY` | No | Enables Gemini chat + reports; demo works without it |
-| `GEMINI_USE_IN_PIPELINE` | No | Default `false` (recommended on free tier) |
-| `GEMINI_USE_FOR_EMBEDDINGS` | No | Default `false` |
+| `NEBIUS_API_KEY` | No | Enables Nebius chat + reports; demo works without it |
+| `NEBIUS_MODEL` | No | Default `MiniMaxAI/MiniMax-M3` |
+| `LLM_USE_IN_PIPELINE` | No | Default `false` (keep pipeline heuristic-only) |
 
 Do **not** set `VITE_API_URL` unless overriding — production defaults to same-origin `/_/backend`.
 
@@ -39,7 +39,7 @@ Optional overrides:
 
 ```bash
 curl https://YOUR-APP.vercel.app/_/backend/api/health
-# → {"status":"ok","gemini":...}
+# → {"status":"ok","llm":true,"llmProvider":"nebius",...}
 
 # Open the app, run a query (first run may take 15–40s while agents finish)
 ```

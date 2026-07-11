@@ -10,21 +10,20 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    google_api_key: str = ""
-    gemini_fast_model: str = "gemini-2.5-flash"
-    gemini_deep_model: str = "gemini-2.5-pro"
-    gemini_embed_model: str = "text-embedding-004"
-    # Free tier ≈5 RPM — keep pipeline off Gemini by default; chat/report use the budget.
-    gemini_use_in_pipeline: bool = False
-    gemini_use_for_embeddings: bool = False
-    gemini_max_rpm: int = 4
-    gemini_timeout_seconds: float = 20.0
-    gemini_quota_cooldown_seconds: float = 55.0
+    nebius_api_key: str = ""
+    nebius_base_url: str = "https://api.tokenfactory.us-central1.nebius.com/v1"
+    nebius_model: str = "MiniMaxAI/MiniMax-M3"
+    nebius_deep_model: str = "MiniMaxAI/MiniMax-M3"
+    # Keep pipeline off the LLM by default; chat / enrich / report use the budget.
+    llm_use_in_pipeline: bool = False
+    llm_max_rpm: int = 30
+    llm_timeout_seconds: float = 60.0
+    llm_quota_cooldown_seconds: float = 10.0
     entrez_email: str = ""
 
     # CRAFT / Emergence MCP — real-world evidence investigation (IDC + PanCancer).
     # Without a token the client runs in deterministic demo mode so the feature
-    # always works offline (mirrors the Gemini-optional philosophy).
+    # always works offline (mirrors the LLM-optional philosophy).
     emergence_project_id: str = "1ac58445-c4ad-49db-b392-17c8003729ef"
     emergence_mcp_url: str = "https://nebius.emergence.ai/mcp"
     emergence_mcp_token: str = ""
@@ -67,8 +66,8 @@ class Settings(BaseSettings):
         return r or None
 
     @property
-    def gemini_enabled(self) -> bool:
-        return bool(self.google_api_key.strip())
+    def llm_enabled(self) -> bool:
+        return bool(self.nebius_api_key.strip())
 
     @property
     def craft_live(self) -> bool:

@@ -2,11 +2,28 @@ from __future__ import annotations
 
 import asyncio
 
+import re
+
 from app.agents.base import AgentContext, timer
 from app.core.config import get_settings
 from app.models.schemas import GraphNode, PaperRecord
 from app.services.paper_urls import resolve_paper_url
 from app.services import arxiv_client, pubmed, seed, semantic_scholar
+
+
+def _clean_search_query(query: str) -> str:
+    """Normalize a query for relevance search APIs.
+
+    Semantic Scholar and arXiv do plain-text relevance ranking, so literal
+    boolean operators ("asthma AND lung cancer") and quotes hurt recall. We strip
+    operators/punctuation to a clean keyword string. (PubMed still accepts the
+    result fine.)
+    """
+    q = re.sub(r"\b(?:AND|OR|NOT)\b", " ", query, flags=re.IGNORECASE)
+    q = re.sub(r'["\'()\[\]{}]', " ", q)
+    q = re.sub(r"[,;/]+", " ", q)
+    q = re.sub(r"\s+", " ", q).strip()
+    return q or query.strip()
 
 
 def chunk_text(text: str, size: int = 800, overlap: int = 120) -> list[str]:
@@ -68,18 +85,20 @@ class IngestionAgent:
     async def run_query(self, ctx: AgentContext) -> list[PaperRecord]:
         settings = get_settings()
         await ctx.stage("ingestion")
+        search_q = _clean_search_query(ctx.query)
         await ctx.audit(
             self.name, "Dispatch literature search",
             detail="Semantic Scholar · PubMed · arXiv",
-            params={"query": ctx.query, "embedding_backend": ctx.vectors.embedder.mode,
+            params={"query": ctx.query, "searchQuery": search_q,
+                    "embedding_backend": ctx.vectors.embedder.mode,
                     "vector_store": ctx.vectors.backend},
         )
 
         with timer() as t:
             results = await asyncio.gather(
-                semantic_scholar.search(ctx.query, limit=20),
+                semantic_scholar.search(search_q, limit=20),
                 pubmed.search(ctx.query, limit=12),
-                arxiv_client.search(ctx.query, limit=8),
+                arxiv_client.search(search_q, limit=8),
                 return_exceptions=True,
             )
         s2, pm, ax = [r if isinstance(r, list) else [] for r in results]

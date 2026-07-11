@@ -106,7 +106,7 @@ FastAPI  ──►  LangGraph orchestrator
    │              │  investigation sub-graph (planner → … → synthesizer)
    │              │  CRAFT chat router (domain detect → text-to-SQL)
    ▼
-   Semantic Scholar · PubMed · arXiv · user PDFs · Google Gemini
+   Semantic Scholar · PubMed · arXiv · user PDFs · Nebius Token Factory (MiniMax-M3)
    Emergence CRAFT MCP (IDC + PanCancer + 7 other Spider 2.0 connections)
    ▼
    ChromaDB (vectors) · SQLite (provenance/audit) · NetworkX (graph compute)
@@ -114,7 +114,7 @@ FastAPI  ──►  LangGraph orchestrator
 
 **Modes:** Home (research query) · Auto (deterministic hot-topic launcher, zero API cost) · Graph · Hypotheses · Chat — persistent navbar on every view.
 
-**Inference:** Google Gemini for chat, hypothesis enrichment, reports, and synthesizer narrative (user-initiated only). The literature pipeline and Auto mode use fast heuristics so quota is never burned on background work. Point at Nebius Token Factory (Nemotron-3 Super 120B) by swapping the LLM endpoint in config.
+**Inference:** Nebius Token Factory (`MiniMaxAI/MiniMax-M3`) via OpenAI-compatible chat completions for chat, hypothesis enrichment, reports, and synthesizer narrative (user-initiated only). The literature pipeline and Auto mode use fast heuristics so credits are never burned on background work.
 
 ---
 
@@ -145,7 +145,7 @@ cp .env.example .env
 .venv/bin/uvicorn app.main:app --port 8000 --reload
 ```
 
-The server prints its mode on startup, e.g. `gemini=off (demo mode) craft=demo embeddings=hashing`.
+The server prints its mode on startup, e.g. `nebius=on model=MiniMaxAI/MiniMax-M3 craft=demo embeddings=hashing`.
 
 #### 2. Frontend (Node 18+)
 
@@ -161,13 +161,15 @@ Open http://localhost:5173. The Vite dev server proxies `/api` and `/ws` to the 
 
 | Variable | Purpose |
 |----------|---------|
-| `GOOGLE_API_KEY` | Gemini for chat, hypothesis click, reports (optional — demo mode works without) |
+| `NEBIUS_API_KEY` | Nebius Token Factory for chat, hypothesis click, reports (optional — demo mode works without) |
+| `NEBIUS_BASE_URL` | OpenAI-compatible endpoint (default: `https://api.tokenfactory.us-central1.nebius.com/v1`) |
+| `NEBIUS_MODEL` | Inference model (default: `MiniMaxAI/MiniMax-M3`) |
 | `EMERGENCE_MCP_TOKEN` | Live CRAFT MCP access (optional — deterministic demo aggregates without) |
 | `EMERGENCE_PROJECT_ID` | Emergence project UUID |
 | `CRAFT_PANCANCER_CONNECTION` / `CRAFT_IDC_CONNECTION` | Default connection slugs (auto-resolved live via `list_data_connections`) |
 | `CRAFT_MAX_QUERIES_PER_INVESTIGATION` | Cap per investigation (default 6) |
 
-> **Free-tier mindfulness:** Gemini free tier ≈5 req/min. The research pipeline never calls Gemini. CRAFT investigation and chat text-to-SQL are capped per message. Auto mode is fully offline.
+> **Token mindfulness:** The research pipeline never calls the LLM. Nebius is used only for user-initiated chat, hypothesis enrichment, and reports. CRAFT investigation and chat text-to-SQL are capped per message. Auto mode is fully offline.
 
 ---
 
@@ -176,7 +178,7 @@ Open http://localhost:5173. The Vite dev server proxies `/api` and `/ws` to the 
 1. **Query** — Enter `KRAS G12C lung cancer resistance` on Home, or pick a hot topic from **Auto** (no API cost).
 2. **Live ingestion** — Open the Audit toggle. Watch agents fetch from Semantic Scholar, PubMed, and arXiv as paper nodes animate into the graph.
 3. **Explore the graph** — Concepts (vermillion), papers (white), uploads (green), CRAFT datasets (accent glow). Click a gene node; filter by year or source.
-4. **Hypotheses** — Switch to Hypotheses. Click **H01** — Gemini enriches the card (if live) and **CRAFT investigation starts automatically**.
+4. **Hypotheses** — Switch to Hypotheses. Click **H01** — Nebius enriches the card (if live) and **CRAFT investigation starts automatically**.
 5. **Investigation Timeline** — Watch 18 steps stream: planner scopes the question, analysts query PanCancer + IDC, synthesizer produces the tri-modal scorecard. Expand any step to see the NL question, tool, SQL, and row preview.
 6. **Validation Scorecard** — Literature vs. genomics vs. imaging scores, revised confidence, and the actionable radiogenomic finding.
 7. **Chat** — Ask *"what's the connection between autism and Alzheimer's?"* (general biomedical Q&A) or *"how often is TP53 mutated in breast cancer?"* (CRAFT text-to-SQL against PanCancer).
@@ -223,7 +225,7 @@ frontend/
 |-------|-------------|
 | **Frontend** | React 18, Vite, Tailwind CSS, Framer Motion, Zustand, react-force-graph-2d, Recharts, Lucide |
 | **Backend** | FastAPI, LangGraph, LangChain, ChromaDB, SQLAlchemy/SQLite, NetworkX, httpx, pypdf |
-| **LLM** | Google Gemini (chat, enrichment, reports) · compatible with Nebius Token Factory / Nemotron-3 |
+| **LLM** | Nebius Token Factory — `MiniMaxAI/MiniMax-M3` via OpenAI-compatible `/v1/chat/completions` |
 | **Data intelligence** | Emergence AI CRAFT MCP — `generate_sql`, `execute_query`, `search_schema`, `resolve_term`, `generate_plotly_chart` |
 | **Enterprise data** | Spider 2.0: IDC, PANCANCER_ATLAS_1, THELOOK_ECOMMERCE, BRAZILIAN_E_COMMERCE, CRYPTO, GA4, FIREBASE, GITHUB_REPOS, DEPS_DEV_V1 |
 | **Literature** | Semantic Scholar, PubMed/Entrez, arXiv, user PDF upload |

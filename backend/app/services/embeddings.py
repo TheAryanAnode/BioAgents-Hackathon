@@ -1,9 +1,8 @@
 """Embedding + vector store abstraction with graceful fallbacks.
 
-Order of preference for embeddings:
-  1. Gemini ``text-embedding-004`` when an API key is present.
-  2. A deterministic hashing embedding (no network, no model download) so the
-     demo always has working semantic-ish retrieval.
+Embeddings use a deterministic hashing scheme (no network, no model download) so
+the demo always has working semantic-ish retrieval. Chat and reports use Nebius
+Token Factory; vector search stays local.
 
 Order of preference for the vector store:
   1. ChromaDB (persistent, local).
@@ -49,34 +48,12 @@ def _hashing_embed(text: str, dim: int = _HASH_DIM) -> list[float]:
 class EmbeddingClient:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self._gemini = None
-        if self.settings.gemini_enabled:
-            try:
-                from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
-                self._gemini = GoogleGenerativeAIEmbeddings(
-                    model=f"models/{self.settings.gemini_embed_model}",
-                    google_api_key=self.settings.google_api_key,
-                )
-            except Exception:
-                self._gemini = None
 
     @property
     def mode(self) -> str:
-        if self._gemini and self.settings.gemini_use_for_embeddings:
-            return "gemini"
         return "hashing"
 
     def embed(self, texts: list[str], *, interactive: bool = False) -> list[list[float]]:
-        use_gemini = (
-            self._gemini
-            and (interactive or self.settings.gemini_use_for_embeddings)
-        )
-        if use_gemini:
-            try:
-                return self._gemini.embed_documents(texts)
-            except Exception:
-                pass
         return [_hashing_embed(t) for t in texts]
 
     def embed_one(self, text: str) -> list[float]:

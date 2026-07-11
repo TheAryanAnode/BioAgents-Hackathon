@@ -38,13 +38,15 @@ router = APIRouter(prefix="/api")
 @router.get("/health")
 async def health():
     llm = get_llm()
+    s = get_settings()
     return {
         "status": "ok",
-        "gemini": llm.enabled,
-        "geminiPipeline": llm.pipeline_llm_allowed,
-        "geminiEmbeddings": get_settings().gemini_use_for_embeddings,
-        "geminiQuotaExhausted": llm.quota_exhausted,
-        "geminiMaxRpm": get_settings().gemini_max_rpm,
+        "llm": llm.enabled,
+        "llmProvider": llm.provider,
+        "llmModel": s.nebius_model,
+        "llmPipeline": llm.pipeline_llm_allowed,
+        "llmQuotaExhausted": llm.quota_exhausted,
+        "llmMaxRpm": s.llm_max_rpm,
     }
 
 
@@ -87,7 +89,7 @@ async def generate_hypothesis(session_id: str):
 
 @router.post("/sessions/{session_id}/hypotheses/{hypothesis_id}/enrich")
 async def enrich_hypothesis_route(session_id: str, hypothesis_id: str):
-    """Single Gemini call when user selects a hypothesis — not used by the auto pipeline."""
+    """Single Nebius LLM call when user selects a hypothesis — not used by the auto pipeline."""
     ctx = get_context(session_id)
     if not ctx:
         raise HTTPException(404, "session not ready")

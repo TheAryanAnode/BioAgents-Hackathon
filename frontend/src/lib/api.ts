@@ -27,9 +27,11 @@ async function json<T>(res: Response): Promise<T> {
 export const api = {
   async health(): Promise<{
     status: string;
-    gemini: boolean;
-    geminiPipeline?: boolean;
-    geminiQuotaExhausted?: boolean;
+    llm: boolean;
+    llmProvider?: string;
+    llmModel?: string;
+    llmPipeline?: boolean;
+    llmQuotaExhausted?: boolean;
   }> {
     return json(await fetch(`${BASE}/health`));
   },
@@ -56,7 +58,7 @@ export const api = {
     );
   },
 
-  /** One Gemini call — only when user explicitly selects a hypothesis. */
+  /** One Nebius LLM call — only when user explicitly selects a hypothesis. */
   async enrichHypothesis(
     sessionId: string,
     hypothesisId: string,

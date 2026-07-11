@@ -30,7 +30,7 @@ export function HypothesisPanel() {
   const selectedId = useStore((s) => s.selectedHypothesisId);
   const select = useStore((s) => s.selectHypothesis);
   const sessionId = useStore((s) => s.sessionId);
-  const geminiLive = useStore((s) => s.geminiLive);
+  const llmLive = useStore((s) => s.llmLive);
   const applyEvent = useStore((s) => s.applyEvent);
   const startInvestigation = useStore((s) => s.startInvestigation);
   const endInvestigation = useStore((s) => s.endInvestigation);
@@ -46,7 +46,7 @@ export function HypothesisPanel() {
     hypotheses.find((h) => h.id === selectedId) ?? hypotheses[0] ?? null;
 
   /**
-   * Clicking a hypothesis card selects it, refines it with Gemini (if live),
+   * Clicking a hypothesis card selects it, refines it with Nebius (if live),
    * and automatically kicks off the CRAFT investigation once per hypothesis.
    * The investigation works in demo mode too, so this always produces the
    * tri-modal scorecard + timeline without the user hunting for a button.
@@ -56,8 +56,8 @@ export function HypothesisPanel() {
     const h = hypotheses.find((x) => x.id === id);
     if (!sessionId || !h) return;
 
-    // Gemini enrichment (only when live + not already enriched).
-    if (geminiLive && !h.geminiEnriched && enrichingRef.current !== id) {
+    // Nebius LLM enrichment (only when live + not already enriched).
+    if (llmLive && !h.llmEnriched && enrichingRef.current !== id) {
       enrichingRef.current = id;
       setEnrichBusy(true);
       try {
@@ -88,7 +88,7 @@ export function HypothesisPanel() {
     try {
       const h = await api.generateHypothesis(sessionId);
       applyEvent({ type: "hypotheses", payload: [...hypotheses, h] });
-      select(h.id); // heuristic only — no Gemini until user clicks the card
+      select(h.id); // heuristic only — no Nebius until user clicks the card
     } finally {
       setBusy(false);
     }
@@ -203,7 +203,7 @@ export function HypothesisPanel() {
             onGenerateReport={generateReport}
             reportBusy={reportBusy}
             enrichBusy={enrichBusy}
-            geminiLive={geminiLive}
+            llmLive={llmLive}
             onInvestigate={() => void investigate(selected.id)}
             investigateBusy={investigateBusy}
           />
@@ -226,7 +226,7 @@ function HypothesisDetail({
   onGenerateReport,
   reportBusy,
   enrichBusy,
-  geminiLive,
+  llmLive,
   onInvestigate,
   investigateBusy,
 }: {
@@ -234,7 +234,7 @@ function HypothesisDetail({
   onGenerateReport: () => void;
   reportBusy: boolean;
   enrichBusy: boolean;
-  geminiLive: boolean;
+  llmLive: boolean;
   onInvestigate: () => void;
   investigateBusy: boolean;
 }) {
@@ -255,22 +255,22 @@ function HypothesisDetail({
 
   return (
     <div className="space-y-8 p-6 md:p-8">
-      {enrichBusy && geminiLive && (
+      {enrichBusy && llmLive && (
         <div className="flex items-center gap-2 border border-border bg-muted/30 px-4 py-3">
           <Loader2 size={14} className="animate-spin text-accent" />
           <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            Analyzing with Gemini (1 request)…
+            Analyzing with Nebius (1 request)…
           </span>
         </div>
       )}
-      {!enrichBusy && hypothesis.geminiEnriched && (
+      {!enrichBusy && hypothesis.llmEnriched && (
         <p className="font-mono text-[10px] uppercase tracking-widest text-support">
-          Gemini-enriched · evidence stances refined
+          Nebius-enriched · evidence stances refined
         </p>
       )}
-      {!hypothesis.geminiEnriched && geminiLive && !enrichBusy && (
+      {!hypothesis.llmEnriched && llmLive && !enrichBusy && (
         <p className="text-xs text-muted-foreground">
-          Heuristic preview — select this hypothesis to refine with Gemini (1 API call).
+          Heuristic preview — select this hypothesis to refine with Nebius (1 API call).
         </p>
       )}
       <div>

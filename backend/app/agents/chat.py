@@ -59,7 +59,7 @@ async def answer(ctx: AgentContext, req: ChatRequest) -> dict:
 
     await ctx.audit(
         "chat", "Retrieve evidence",
-        detail=f"{len(citations)} sources · gemini={'on' if ctx.llm.enabled else 'off'}",
+        detail=f"{len(citations)} sources · nebius={'on' if ctx.llm.enabled else 'off'}",
         params={"k": len(citations), "focus": req.focusNodeId, "message": message[:80]},
     )
 
@@ -97,22 +97,26 @@ async def answer(ctx: AgentContext, req: ChatRequest) -> dict:
             "CRAFT's semantic layer."
             if craft_block else ""
         )
-        prompt = f"""You are SynthesisOS, an expert research assistant. You answer biomedical questions from literature, and you also investigate real datasets through CRAFT's text-to-SQL semantic layer.
+        prompt = f"""You are SynthesisOS, an expert biomedical and scientific research assistant.
 
+The user may have an active research session with ingested papers, but that session topic is BACKGROUND ONLY — it is NOT a restriction on what you may discuss. You MUST answer every reasonable question the user asks, including topics completely unrelated to their session query.
+
+SESSION BACKGROUND (do not treat this as a scope limit):
 {session_ctx}{focus_line}
 
-INGESTED LITERATURE (prioritize when relevant — cite paper titles):
+INGESTED LITERATURE (cite paper titles when relevant; skip if unrelated to the question):
 {corpus_block}{craft_section}
 
 USER QUESTION:
 {message}
 
 Instructions:
-1. Answer clearly in 3–8 sentences (longer if the question is complex).
-2. When the question relates to the session corpus, ground your answer in the ingested literature and mention paper titles.
-3. If the question is outside the corpus scope, still answer helpfully using established scientific knowledge — prefix that portion with "General context:" so the user knows it is not from their uploaded/fetched papers.
-4. If both corpus and general knowledge apply, combine them and distinguish sources.
-5. Be direct; do not refuse reasonable out-of-scope questions.{craft_instr}"""
+1. ALWAYS answer the question directly. Never refuse solely because the topic differs from the session research query.
+2. If the question is outside the ingested corpus, answer from established scientific knowledge and prefix with "General context:".
+3. If corpus papers are relevant, ground part of your answer in them and mention titles.
+4. If both apply, combine them and clearly distinguish corpus evidence from general knowledge.
+5. Be helpful, accurate, and direct in 3–8 sentences (longer if the question is complex).
+6. Do not say you "can only speak to" the corpus topic or that you "cannot answer" off-topic questions.{craft_instr}"""
         content = ctx.llm.complete_interactive(prompt)
 
     if not content and ctx.llm.quota_exhausted:
@@ -121,9 +125,8 @@ Instructions:
             snippet = context_blocks[0].split("\n", 1)[-1][:220]
             corpus_hint = f"Based on your corpus ({len(citations)} sources): {snippet}…"
         content = (
-            "Gemini rate limit reached (free tier ≈5 requests/min). "
-            "Wait about a minute and try again, or set GEMINI_USE_IN_PIPELINE=false in backend/.env "
-            "so the research pipeline does not consume your quota. "
+            "Nebius rate limit reached. Wait a moment and try again, or check your "
+            "NEBIUS_API_KEY in backend/.env. "
             + (corpus_hint or "Try a simpler question or browse the graph and hypotheses meanwhile.")
         )
 
@@ -144,7 +147,7 @@ Instructions:
             content = (
                 "I couldn't find closely matching papers in this session's corpus. "
                 "Try rephrasing, uploading a relevant PDF, or broadening your initial research query. "
-                "Add a GOOGLE_API_KEY to enable Gemini for general biomedical Q&A beyond the corpus."
+                "Add a NEBIUS_API_KEY to enable Nebius Token Factory for general biomedical Q&A beyond the corpus."
             )
 
     content = content.strip()
@@ -156,7 +159,7 @@ Instructions:
 
 
 def _craft_headline(craft_qa: dict) -> str:
-    """One-line natural summary of the top CRAFT result row (Gemini-free fallback)."""
+    """One-line natural summary of the top CRAFT result row (LLM-free fallback)."""
     rows = craft_qa.get("rows") or []
     if not rows:
         return "The query returned no rows for these filters."

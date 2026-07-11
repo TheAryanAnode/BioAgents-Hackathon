@@ -7,7 +7,7 @@ import { Button } from "../components/ui/Button";
  * Auto mode — surfaces "hot" research fronts without spending any API credits.
  * Topics are drawn from a curated, locally-scored pool (deterministic), so this
  * screen is free to browse and reshuffle. Selecting one launches the normal
- * research pipeline (which is where CRAFT + Gemini spend happens, on demand).
+ * research pipeline (which is where CRAFT + Nebius spend happens, on demand).
  */
 
 interface HotTopic {
@@ -34,10 +34,10 @@ const POOL: HotTopic[] = [
 
 export function AutoMode({
   onStart,
-  geminiLive,
+  llmLive,
 }: {
   onStart: (q: string) => void;
-  geminiLive: boolean;
+  llmLive: boolean;
 }) {
   const [seed, setSeed] = useState(0);
 
@@ -80,7 +80,7 @@ export function AutoMode({
               <RefreshCw size={14} strokeWidth={1.5} /> Reshuffle
             </Button>
             <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              {geminiLive ? "Gemini on demand" : "Demo mode"} · locally generated
+              {llmLive ? "Nebius on demand" : "Demo mode"} · locally generated
             </span>
           </div>
         </motion.div>

@@ -28,8 +28,9 @@ interface Store {
   view: View;
   stage: Stage;
   running: boolean;
-  geminiLive: boolean;
-  geminiQuotaExhausted: boolean;
+  llmLive: boolean;
+  llmQuotaExhausted: boolean;
+  llmModel: string;
 
   graph: GraphData;
   hypotheses: Hypothesis[];
@@ -50,7 +51,7 @@ interface Store {
   setView: (v: View) => void;
   setQuery: (q: string) => void;
   setSession: (id: string) => void;
-  setGemini: (live: boolean, quotaExhausted?: boolean) => void;
+  setLlm: (live: boolean, quotaExhausted?: boolean, model?: string) => void;
   setRunning: (r: boolean) => void;
   selectNode: (n: GraphNode | null) => void;
   selectHypothesis: (id: string | null) => void;
@@ -69,8 +70,9 @@ export const useStore = create<Store>((set, get) => ({
   view: "home",
   stage: "idle",
   running: false,
-  geminiLive: false,
-  geminiQuotaExhausted: false,
+  llmLive: false,
+  llmQuotaExhausted: false,
+  llmModel: "",
 
   graph: emptyGraph,
   hypotheses: [],
@@ -91,8 +93,12 @@ export const useStore = create<Store>((set, get) => ({
   setView: (v) => set({ view: v }),
   setQuery: (q) => set({ query: q }),
   setSession: (id) => set({ sessionId: id }),
-  setGemini: (live: boolean, quotaExhausted?: boolean) =>
-    set({ geminiLive: live, geminiQuotaExhausted: quotaExhausted ?? false }),
+  setLlm: (live: boolean, quotaExhausted?: boolean, model?: string) =>
+    set({
+      llmLive: live,
+      llmQuotaExhausted: quotaExhausted ?? false,
+      llmModel: model ?? get().llmModel,
+    }),
   setRunning: (r) => set({ running: r }),
   selectNode: (n) => set({ selectedNode: n }),
   selectHypothesis: (id) => set({ selectedHypothesisId: id }),

@@ -167,7 +167,7 @@ export interface Hypothesis {
   confidenceExplanation?: string;
   confidenceBreakdown?: ConfidenceBreakdown;
   opportunity?: HypothesisOpportunity;
-  geminiEnriched?: boolean;
+  llmEnriched?: boolean;
   craftInvestigated?: boolean;
   investigation?: InvestigationResult | null;
 }

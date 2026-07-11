@@ -1,4 +1,4 @@
-"""On-demand Gemini enrichment for a single hypothesis — one API call per click."""
+"""On-demand Nebius LLM enrichment for a single hypothesis — one API call per click."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from app.models.schemas import Hypothesis
 
 
 async def enrich_hypothesis(ctx: AgentContext, h: Hypothesis) -> Hypothesis:
-    """Refine statement + evidence stances with a single Gemini call. Idempotent."""
-    if h.geminiEnriched or not ctx.llm.enabled:
+    """Refine statement + evidence stances with a single Nebius LLM call. Idempotent."""
+    if h.llmEnriched or not ctx.llm.enabled:
         return h
     if not ctx.llm.can_call():
         await ctx.audit(
             "enrich",
-            "Gemini skipped (rate limit)",
+            "LLM skipped (rate limit)",
             detail=h.statement[:60],
             status="error",
         )
@@ -48,7 +48,7 @@ Return JSON ONLY:
     if not isinstance(data, dict):
         await ctx.audit(
             "enrich",
-            "Gemini enrichment unavailable",
+            "LLM enrichment unavailable",
             detail=h.statement[:60],
             status="error",
         )
@@ -95,11 +95,11 @@ Return JSON ONLY:
         ctx, h.entities, evidence_paper_ids=[e.paperId for e in h.evidence]
     )
     CommercialAgent().attach_opportunity(ctx, h)
-    h.geminiEnriched = True
+    h.llmEnriched = True
 
     await ctx.audit(
         "enrich",
-        "Hypothesis enriched (Gemini)",
+        "Hypothesis enriched (Nebius)",
         detail=h.statement[:80],
         params={"hypothesisId": h.id, "confidence": h.confidence},
     )

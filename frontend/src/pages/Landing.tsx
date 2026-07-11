@@ -14,10 +14,10 @@ const EXAMPLES = [
 
 export function Landing({
   onStart,
-  geminiLive,
+  llmLive,
 }: {
   onStart: (q: string) => void;
-  geminiLive: boolean;
+  llmLive: boolean;
 }) {
   const [value, setValue] = useState("");
 
@@ -27,8 +27,8 @@ export function Landing({
   };
 
   return (
-    <div className="relative flex h-full flex-col justify-center overflow-y-auto px-6 py-20 md:px-12 lg:px-16">
-      <div className="pointer-events-none absolute right-4 top-24 -z-10 select-none font-mono text-[18vw] leading-none text-muted opacity-30 md:text-[14vw]">
+    <div className="relative flex h-full min-h-0 flex-col justify-start overflow-y-auto px-6 pb-20 pt-10 md:px-12 md:pt-14 lg:px-16">
+      <div className="pointer-events-none absolute right-4 top-32 -z-10 select-none font-mono text-[18vw] leading-none text-muted opacity-30 md:text-[14vw]">
         01
       </div>
 
@@ -47,10 +47,10 @@ export function Landing({
             <span className="label-mono">Emergence Hackathon — Autonomous Investigation</span>
           </div>
 
-          <h1 className="max-w-5xl text-balance font-sans text-5xl font-extrabold leading-none tracking-tighter md:text-7xl lg:text-8xl">
-            YOU DON'T QUERY DATA.
+          <h1 className="max-w-5xl text-balance font-sans text-4xl font-extrabold leading-tight tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl">
+            You tell us topics.
             <br />
-            YOU <span className="text-accent">INVESTIGATE</span> IT.
+            We find <span className="text-accent">insights</span>.
           </h1>
 
           <p className="mt-8 max-w-2xl text-lg leading-normal text-muted-foreground md:text-xl">
@@ -112,11 +112,11 @@ export function Landing({
           className="mt-20 flex items-center gap-2 border-t border-border pt-6"
         >
           <span
-            className={`h-2 w-2 ${geminiLive ? "bg-support" : "bg-muted-foreground"}`}
+            className={`h-2 w-2 ${llmLive ? "bg-support" : "bg-muted-foreground"}`}
           />
           <span className="label-mono">
-            {geminiLive
-              ? "Gemini on demand — chat, hypothesis click, & reports only"
+            {llmLive
+              ? "Nebius Token Factory — chat, hypothesis click, & reports"
               : "Demo mode — deterministic synthesis (no API key)"}
           </span>
         </motion.div>

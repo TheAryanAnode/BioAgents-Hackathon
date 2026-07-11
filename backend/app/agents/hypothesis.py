@@ -106,6 +106,56 @@ class HypothesisAgent:
         h.subgraph = build_hypothesis_subgraph(ctx, entities)
         return h
 
+    def _fallback_gaps(
+        self, g: nx.Graph, concept_ids: dict[str, str], entity_type: dict[str, str], topic: str
+    ) -> list[tuple[str, str, str]]:
+        """When no clean open triangles exist (sparse graph / unusual topic),
+        still propose hypotheses by pairing the most connected specific concepts,
+        bridged by a shared neighbor or the dominant topic hub. Guarantees the
+        product returns hypotheses for ANY searched topic."""
+        topic_l = topic.lower()
+        nodes = [cid for cid in concept_ids.values() if g.has_node(cid)]
+        if len(nodes) < 2:
+            return []
+
+        def label(n: str) -> str:
+            return g.nodes[n].get("label", n)
+
+        def is_topic(n: str) -> bool:
+            lab = label(n).lower()
+            return lab in topic_l or topic_l in lab
+
+        # Rank specific (non-topic) concepts by degree; prefer gene/pathway/disease.
+        def rank(n: str) -> tuple[int, int]:
+            k = entity_type.get(label(n), "concept")
+            mech = 1 if k in ("gene", "pathway", "disease", "drug") else 0
+            return (mech, g.degree(n))
+
+        specific = sorted((n for n in nodes if not is_topic(n)), key=rank, reverse=True)
+        topic_nodes = [n for n in nodes if is_topic(n)]
+        default_bridge = topic_nodes[0] if topic_nodes else (specific[-1] if specific else None)
+
+        out: list[tuple[str, str, str]] = []
+        seen: set[frozenset] = set()
+        for i in range(len(specific)):
+            for j in range(i + 1, len(specific)):
+                a, b = specific[i], specific[j]
+                if g.has_edge(a, b):
+                    continue
+                key = frozenset([a, b])
+                if key in seen:
+                    continue
+                seen.add(key)
+                shared = set(g.neighbors(a)) & set(g.neighbors(b))
+                shared_concepts = [c for c in shared if g.nodes[c].get("type") == "concept"]
+                bridge = shared_concepts[0] if shared_concepts else default_bridge
+                if bridge is None or bridge in (a, b):
+                    continue
+                out.append((label(a), label(b), label(bridge)))
+                if len(out) >= 8:
+                    return out
+        return out
+
     def candidate_gaps(self, ctx: AgentContext):
         g: nx.Graph = ctx.work.get("nx_graph")
         concept_ids: dict[str, str] = ctx.work.get("concept_ids", {})
@@ -113,7 +163,14 @@ class HypothesisAgent:
         if g is None or not concept_ids:
             return []
         gaps = _open_triangles(g, concept_ids, entity_type, ctx.query)
-        return [(_label(g, a), _label(g, b), _label(g, bridge)) for a, b, bridge, _ in gaps]
+        result = [(_label(g, a), _label(g, b), _label(g, bridge)) for a, b, bridge, _ in gaps]
+        if len(result) < 3:
+            # Sparse graph — supplement with degree-based fallback pairs.
+            existing = {frozenset([a, b]) for a, b, _ in result}
+            for a, b, bridge in self._fallback_gaps(g, concept_ids, entity_type, ctx.query):
+                if frozenset([a, b]) not in existing:
+                    result.append((a, b, bridge))
+        return result
 
     async def run(self, ctx: AgentContext, n: int = 3) -> list[Hypothesis]:
         await ctx.stage("hypothesis")

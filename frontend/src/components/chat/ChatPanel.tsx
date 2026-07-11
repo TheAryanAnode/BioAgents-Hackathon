@@ -19,8 +19,9 @@ export function ChatPanel() {
   const addChat = useStore((s) => s.addChat);
   const selectedNode = useStore((s) => s.selectedNode);
   const nodes = useStore((s) => s.graph.nodes);
-  const geminiLive = useStore((s) => s.geminiLive);
-  const geminiQuotaExhausted = useStore((s) => s.geminiQuotaExhausted);
+  const llmLive = useStore((s) => s.llmLive);
+  const llmQuotaExhausted = useStore((s) => s.llmQuotaExhausted);
+  const llmModel = useStore((s) => s.llmModel);
   const selectNode = useStore((s) => s.selectNode);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -73,10 +74,10 @@ export function ChatPanel() {
           <span className="label-mono">Research Q&amp;A</span>
         </div>
         <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {geminiQuotaExhausted
-            ? "Rate limited — wait ~1 min"
-            : geminiLive
-              ? "Gemini + corpus"
+          {llmQuotaExhausted
+            ? "Rate limited — wait a moment"
+            : llmLive
+              ? `Nebius · ${llmModel || "MiniMax-M3"}`
               : "Corpus only"}
         </span>
       </div>
@@ -85,7 +86,7 @@ export function ChatPanel() {
         {chat.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <p className="max-w-md text-lg leading-normal text-muted-foreground">
-              Ask about your synthesized literature. Each message uses one Gemini request when configured.
+              Ask about your synthesized literature or CRAFT enterprise data. Each message uses one Nebius inference call when configured.
             </p>
             <div className="mt-8 flex flex-col items-center gap-3">
               {SUGGESTIONS.map((s) => (

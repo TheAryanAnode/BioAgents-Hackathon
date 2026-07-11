@@ -1,10 +1,13 @@
-"""Thin Gemini wrapper. Returns ``None`` when unavailable so callers fall back
-to deterministic heuristics — the app must work without an API key.
+"""Thin Nebius Token Factory wrapper (OpenAI-compatible chat completions).
 
-Free-tier Gemini is ~5 requests/minute. Gemini is used ONLY for:
-- chat messages (user-initiated)
+Returns ``None`` when unavailable so callers fall back to deterministic
+heuristics — the app must work without an API key.
+
+Nebius is used ONLY for user-initiated calls:
+- chat messages
 - clicking a hypothesis (one call per hypothesis, once)
 - generating a full investment report
+- investigation synthesizer narrative
 
 The research pipeline (graph, evidence, hypotheses) always uses heuristics.
 """
@@ -16,45 +19,34 @@ import re
 import time
 from typing import Optional
 
+import httpx
+
 from app.core.config import get_settings
+
+_SYSTEM = (
+    "You are SynthesisOS, a helpful biomedical and scientific research assistant. "
+    "Answer any reasonable question the user asks. Session-specific literature is "
+    "optional context — never refuse a question because it is outside the current "
+    "research topic."
+)
 
 
 class LLM:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self._fast = None
-        self._deep = None
         self._cooldown_until = 0.0
         self._window_start = time.monotonic()
         self._calls_in_window = 0
         self.quota_exhausted = False
         self.last_error: str | None = None
 
-        if self.settings.gemini_enabled:
-            try:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-
-                common = dict(
-                    google_api_key=self.settings.google_api_key,
-                    max_retries=0,  # never block the pipeline on 16s/32s langchain retries
-                    timeout=self.settings.gemini_timeout_seconds,
-                )
-                self._fast = ChatGoogleGenerativeAI(
-                    model=self.settings.gemini_fast_model,
-                    temperature=0.3,
-                    **common,
-                )
-                self._deep = ChatGoogleGenerativeAI(
-                    model=self.settings.gemini_deep_model,
-                    temperature=0.5,
-                    **common,
-                )
-            except Exception:
-                self._fast = self._deep = None
-
     @property
     def enabled(self) -> bool:
-        return self._fast is not None
+        return self.settings.llm_enabled
+
+    @property
+    def provider(self) -> str:
+        return "nebius" if self.enabled else "demo"
 
     def _reset_window(self) -> None:
         now = time.monotonic()
@@ -70,11 +62,11 @@ class LLM:
         self._reset_window()
         if time.monotonic() < self._cooldown_until:
             return False
-        return self._calls_in_window < self.settings.gemini_max_rpm
+        return self._calls_in_window < self.settings.llm_max_rpm
 
     @property
     def pipeline_llm_allowed(self) -> bool:
-        return self.enabled and self.settings.gemini_use_in_pipeline and self.can_call()
+        return self.enabled and self.settings.llm_use_in_pipeline and self.can_call()
 
     def _register_call(self) -> None:
         self._calls_in_window += 1
@@ -82,25 +74,52 @@ class LLM:
     def _handle_error(self, exc: Exception) -> None:
         msg = str(exc)
         self.last_error = msg[:200]
-        if "429" in msg or "ResourceExhausted" in type(exc).__name__ or "quota" in msg.lower():
+        low = msg.lower()
+        if "429" in msg or "rate" in low or "quota" in low or "too many" in low:
             self.quota_exhausted = True
-            self._cooldown_until = time.monotonic() + self.settings.gemini_quota_cooldown_seconds
+            self._cooldown_until = time.monotonic() + self.settings.llm_quota_cooldown_seconds
+
+    def _invoke(self, prompt: str, *, deep: bool = False) -> str:
+        model = self.settings.nebius_deep_model if deep else self.settings.nebius_model
+        url = f"{self.settings.nebius_base_url.rstrip('/')}/chat/completions"
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.5 if deep else 0.3,
+        }
+        with httpx.Client(timeout=self.settings.llm_timeout_seconds) as client:
+            resp = client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {self.settings.nebius_api_key.strip()}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        choices = data.get("choices") or []
+        if not choices:
+            raise RuntimeError("Nebius returned no choices")
+        content = choices[0].get("message", {}).get("content")
+        if not content:
+            raise RuntimeError("Nebius returned empty content")
+        return str(content)
 
     def complete(self, prompt: str, deep: bool = False, *, force: bool = False) -> Optional[str]:
         """``force=True`` bypasses pipeline budget checks (chat / report). Still rate-limited."""
         if not self.enabled:
             return None
-        if not force and not self.settings.gemini_use_in_pipeline:
+        if not force and not self.settings.llm_use_in_pipeline:
             return None
         if not self.can_call():
             return None
-
-        model = self._deep if deep else self._fast
-        if model is None:
-            return None
         try:
             self._register_call()
-            return model.invoke(prompt).content  # type: ignore[union-attr]
+            return self._invoke(prompt, deep=deep)
         except Exception as exc:
             self._handle_error(exc)
             return None
@@ -109,12 +128,9 @@ class LLM:
         """User-facing calls (chat, report) — always attempt when under RPM cap."""
         if not self.enabled or not self.can_call():
             return None
-        model = self._deep if deep else self._fast
-        if model is None:
-            return None
         try:
             self._register_call()
-            return model.invoke(prompt).content  # type: ignore[union-attr]
+            return self._invoke(prompt, deep=deep)
         except Exception as exc:
             self._handle_error(exc)
             return None

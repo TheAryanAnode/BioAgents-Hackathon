@@ -15,10 +15,10 @@ import { AutoMode } from "../pages/AutoMode";
  */
 export function Workspace({
   onStart,
-  geminiLive,
+  llmLive,
 }: {
   onStart: (q: string) => void;
-  geminiLive: boolean;
+  llmLive: boolean;
 }) {
   const sessionId = useStore((s) => s.sessionId);
   const view = useStore((s) => s.view);
@@ -29,8 +29,8 @@ export function Workspace({
       <Navbar />
       <StageBar />
       <main className="relative flex-1 overflow-hidden">
-        {view === "home" && <Landing onStart={onStart} geminiLive={geminiLive} />}
-        {view === "auto" && <AutoMode onStart={onStart} geminiLive={geminiLive} />}
+        {view === "home" && <Landing onStart={onStart} llmLive={llmLive} />}
+        {view === "auto" && <AutoMode onStart={onStart} llmLive={llmLive} />}
         {view === "graph" && <GraphView />}
         {view === "hypotheses" && <HypothesisPanel />}
         {view === "chat" && <ChatPanel />}
