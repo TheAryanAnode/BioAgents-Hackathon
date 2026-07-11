@@ -153,6 +153,10 @@ class InvestigationResult(BaseModel):
     findingConfidence: int = 0
     divergence: str = ""               # where literature and patient data disagree
     charts: list[dict] = Field(default_factory=list)  # Plotly figure specs
+    # Pan-cancer radiogenomic correlation matrix (modalities × cancer types) +
+    # unsupervised k-means "radiogenomic archetypes" discovered in the CRAFT data.
+    matrixChart: Optional[dict] = None                 # Plotly heatmap figure spec
+    archetypes: list[dict] = Field(default_factory=list)
     dataEvidence: list["EvidenceItem"] = Field(default_factory=list)
     score: InvestigationScore = Field(default_factory=InvestigationScore)
     revisedConfidence: Optional[int] = None

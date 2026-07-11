@@ -126,6 +126,16 @@ export interface InvestigationScore {
 export interface PlotlyFigure {
   data: Array<Record<string, unknown>>;
   layout?: Record<string, unknown>;
+  prevalence?: number[];
+  cancers?: string[];
+}
+
+export interface RadiogenomicArchetype {
+  label: string;
+  members: string[];
+  dominantModality: string;
+  avgPrevalencePct: number;
+  totalStudies: number;
 }
 
 export interface InvestigationResult {
@@ -136,6 +146,8 @@ export interface InvestigationResult {
   findingConfidence: number;
   divergence?: string;
   charts: PlotlyFigure[];
+  matrixChart?: PlotlyFigure | null;
+  archetypes?: RadiogenomicArchetype[];
   dataEvidence: EvidenceItem[];
   score: InvestigationScore;
   revisedConfidence?: number | null;

@@ -116,6 +116,8 @@ async def run(ic: InvestigationContext) -> InvestigationResult:
         findingConfidence=revised,
         divergence=divergence,
         charts=charts,
+        matrixChart=m.get("matrixChart"),
+        archetypes=m.get("archetypes", []),
         dataEvidence=data_evidence,
         score=score,
         revisedConfidence=revised,

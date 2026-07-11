@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import type { InvestigationResult } from "../../lib/types";
 import { cn, formatNumber } from "../../lib/utils";
 import { Card } from "../ui/Card";
+import { RadiogenomicMatrix } from "./RadiogenomicMatrix";
 import { RadiogenomicsChart } from "./RadiogenomicsChart";
 
 /**
@@ -71,6 +72,15 @@ export function ValidationScorecard({
         {chart && (
           <div className="mt-6">
             <RadiogenomicsChart figure={chart} />
+          </div>
+        )}
+
+        {investigation.matrixChart && (
+          <div className="mt-6">
+            <RadiogenomicMatrix
+              figure={investigation.matrixChart}
+              archetypes={investigation.archetypes ?? []}
+            />
           </div>
         )}
 

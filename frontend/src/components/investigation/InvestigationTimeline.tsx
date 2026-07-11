@@ -9,6 +9,7 @@ const AGENT_LABEL: Record<string, string> = {
   craft_planner: "Planner",
   craft_pancancer: "PanCancer analyst",
   craft_imaging: "Imaging analyst",
+  craft_radiogenomics: "Radiogenomics analyst",
   craft_synthesizer: "Synthesizer",
 };
 
@@ -26,6 +27,7 @@ const AGENT_PURPOSE: Record<string, string> = {
   craft_planner: "decides what to investigate",
   craft_pancancer: "checks the genomics (mutations, co-alteration, survival)",
   craft_imaging: "checks imaging feasibility (modalities, measurements)",
+  craft_radiogenomics: "correlates imaging modalities with molecular subtypes across cancers, then clusters them into archetypes",
   craft_synthesizer: "combines everything into the finding",
 };
 

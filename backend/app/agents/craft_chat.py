@@ -16,6 +16,7 @@ Design goals:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.agents.base import AgentContext
@@ -37,16 +38,18 @@ def _domains(settings) -> list[CraftDomain]:
         CraftDomain(
             "medical_imaging", "IDC medical imaging", settings.craft_idc_connection,
             ("idc", "imaging", "dicom"),
-            ("dicom", "imaging modality", "modality", "radiolog", "radiogenomic",
-             "ct scan", "mri", "pet scan", "segmentation", "tumor imaging", "scan"),
+            ("idc", "imaging data commons", "dicom", "imaging modality", "modality",
+             "imaging", "radiolog", "radiogenomic", "ct scan", "mri", "pet scan",
+             "segmentation", "tumor imaging", "scan", "collection", "study instance"),
             "which imaging modalities cover lung cancer",
         ),
         CraftDomain(
             "medical_genomics", "PanCancer genomics", settings.craft_pancancer_connection,
             ("pancancer", "genomic", "tcga", "atlas"),
-            ("mutation", "mutated", "oncogene", "genomic", "tcga", "co-mutation",
-             "co-alteration", "tumor suppressor", "kras", "tp53", "egfr", "braf",
-             "brca1", "brca2", "pik3ca", "cancer genom"),
+            ("pancancer", "pan-cancer", "pan cancer", "atlas", "mutation", "mutated",
+             "oncogene", "genomic", "tcga", "co-mutation", "co-alteration",
+             "tumor suppressor", "kras", "tp53", "egfr", "braf", "brca1", "brca2",
+             "pik3ca", "stk11", "keap1", "cancer genom", "prevalence", "gene"),
             "how often is KRAS mutated in lung cancer",
         ),
         CraftDomain(
@@ -85,13 +88,57 @@ def _domains(settings) -> list[CraftDomain]:
     ]
 
 
+# Explicit database names — a single hit here is enough to route to CRAFT even
+# if the word is ambiguous in isolation (e.g. "IDC", "atlas").
+_STRONG_SIGNALS = {
+    "medical_imaging": ("idc", "imaging data commons", "dicom"),
+    "medical_genomics": ("pancancer", "pan-cancer", "pan cancer", "pancancer atlas"),
+    "ecommerce": ("thelook", "olist"),
+    "crypto": ("blockchain", "on-chain", "onchain"),
+    "analytics": ("ga4", "firebase"),
+    "supply_chain": ("deps.dev", "github_repos", "dependency graph"),
+}
+
+
+def _kw_matches(kw: str, text: str) -> bool:
+    """Plural-tolerant, word-boundary keyword match.
+
+    Phrases (containing a space/hyphen) match as substrings; single tokens match
+    on word boundaries and tolerate simple plurals so "modality" catches
+    "modalities" and "mutation" catches "mutations".
+    """
+    if " " in kw or "-" in kw or "." in kw:
+        return kw in text
+    variants = {kw}
+    if kw.endswith("y"):
+        variants.add(kw[:-1] + "ies")
+    else:
+        variants.add(kw + "s")
+        variants.add(kw + "es")
+    pattern = r"\b(" + "|".join(re.escape(v) for v in variants) + r")\b"
+    return re.search(pattern, text) is not None
+
+
 def detect_domain(text: str, settings) -> CraftDomain | None:
-    """Return the best-matching CRAFT database domain, or None for general chat."""
-    low = f" {text.lower()} "
+    """Return the best-matching CRAFT database domain, or None for general chat.
+
+    Strong signals (explicit DB names like "IDC" or "PanCancer") win immediately;
+    otherwise the domain with the most keyword hits routes the question.
+    """
+    low = text.lower()
+    domains = _domains(settings)
+
+    # 1) Strong signal — explicit database reference always routes to CRAFT.
+    for d in domains:
+        for sig in _STRONG_SIGNALS.get(d.key, ()):  # type: ignore[attr-defined]
+            if _kw_matches(sig, low):
+                return d
+
+    # 2) Otherwise, score by keyword hits.
     best: CraftDomain | None = None
     best_score = 0
-    for d in _domains(settings):
-        score = sum(1 for kw in d.keywords if kw in low)
+    for d in domains:
+        score = sum(1 for kw in d.keywords if _kw_matches(kw, low))
         if score > best_score:
             best, best_score = d, score
     return best if best_score >= 1 else None

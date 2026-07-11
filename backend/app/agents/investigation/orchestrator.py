@@ -19,6 +19,7 @@ from app.agents.investigation import (
     imaging_analyst,
     pancancer_analyst,
     planner,
+    radiogenomics,
     synthesizer,
 )
 from app.agents.investigation.runner import InvestigationContext
@@ -51,6 +52,18 @@ def _build(ic: InvestigationContext):
         await imaging_analyst.run(ic)
         return {"step": "imaging"}
 
+    async def n_radiogenomics(state: _IState) -> _IState:
+        # Pan-cancer correlation matrix + k-means archetypes. Never hard-fails
+        # the investigation — the core scorecard already exists by this point.
+        try:
+            await radiogenomics.run(ic)
+        except Exception as exc:  # pragma: no cover - defensive
+            await ic.ctx.audit(
+                "craft_radiogenomics", "Matrix step skipped",
+                detail=str(exc)[:140], status="error",
+            )
+        return {"step": "radiogenomics"}
+
     async def n_synth(state: _IState) -> _IState:
         result_holder["result"] = await synthesizer.run(ic)
         return {"step": "synthesis"}
@@ -59,11 +72,13 @@ def _build(ic: InvestigationContext):
     sg.add_node("plan", n_plan)
     sg.add_node("pancancer", n_pancancer)
     sg.add_node("imaging", n_imaging)
+    sg.add_node("radiogenomics", n_radiogenomics)
     sg.add_node("synthesis", n_synth)
     sg.add_edge(START, "plan")
     sg.add_edge("plan", "pancancer")
     sg.add_edge("pancancer", "imaging")
-    sg.add_edge("imaging", "synthesis")
+    sg.add_edge("imaging", "radiogenomics")
+    sg.add_edge("radiogenomics", "synthesis")
     sg.add_edge("synthesis", END)
     return sg.compile(), result_holder
 

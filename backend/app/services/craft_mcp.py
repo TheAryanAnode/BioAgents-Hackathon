@@ -87,6 +87,21 @@ def resolve_cancer(text: str) -> tuple[str, str, str]:
     return ("PANCAN", "Pan-Cancer (all TCGA studies)", "tcga")
 
 
+# Study code -> (display name, IDC collection). Deduped from _CANCER_MAP so the
+# radiogenomic matrix can iterate a clean set of TCGA studies.
+_STUDY_INFO: dict[str, tuple[str, str]] = {}
+for _k, (_study, _name, _coll) in _CANCER_MAP.items():
+    _STUDY_INFO.setdefault(_study, (_name, _coll))
+
+# The canonical spread of TCGA studies used to build the radiogenomic matrix.
+MATRIX_STUDIES = ["LUAD", "BRCA", "COAD", "GBM", "SKCM", "PRAD", "OV", "PAAD"]
+
+
+def study_info(study: str) -> tuple[str, str]:
+    """Return (display name, IDC collection) for a TCGA study code."""
+    return _STUDY_INFO.get(study.upper(), (study, f"tcga_{study.lower()}"))
+
+
 def gene_frequency(gene: str, study: str) -> float:
     base = _GENE_BASE_FREQ.get(gene.upper())
     if base is None:
@@ -368,6 +383,31 @@ def _extract_gene(text: str) -> Optional[str]:
 
 
 def _demo_sql(question: str, connection: str, domain: Optional[str] = None) -> str:
+    if domain == "rg_prevalence":
+        gene = _extract_gene(question) or "KRAS"
+        return (
+            "SELECT m.Study AS study,\n"
+            "       COUNT(DISTINCT m.ParticipantBarcode) AS mutated,\n"
+            "       c.cohort,\n"
+            "       ROUND(100.0 * COUNT(DISTINCT m.ParticipantBarcode) / c.cohort, 1) AS frequency_pct\n"
+            "FROM PANCANCER_ATLAS_FILTERED.MC3_MAF_V5_ONE_PER_TUMOR_SAMPLE m\n"
+            "JOIN (SELECT Study, COUNT(DISTINCT ParticipantBarcode) AS cohort\n"
+            "      FROM PANCANCER_ATLAS_FILTERED.MC3_MAF_V5_ONE_PER_TUMOR_SAMPLE GROUP BY Study) c\n"
+            "  ON m.Study = c.Study\n"
+            f"WHERE m.Hugo_Symbol = '{gene}'\n"
+            "GROUP BY m.Study, c.cohort\n"
+            "ORDER BY frequency_pct DESC;"
+        )
+    if domain == "rg_modality":
+        return (
+            "SELECT collection_id AS collection,\n"
+            "       Modality AS modality,\n"
+            "       COUNT(DISTINCT StudyInstanceUID) AS studies\n"
+            "FROM IDC_V17.DICOM_PIVOT\n"
+            "WHERE collection_id LIKE 'tcga_%'\n"
+            "GROUP BY collection_id, Modality\n"
+            "ORDER BY collection, studies DESC;"
+        )
     if domain in _GENERIC_DOMAINS:
         return _demo_sql_generic(question, domain)
     settings = get_settings()
@@ -417,6 +457,37 @@ def _demo_sql(question: str, connection: str, domain: Optional[str] = None) -> s
 
 
 def _demo_rows(sql: str, connection: str, context: dict, domain: Optional[str] = None) -> tuple[list[dict], list[str]]:
+    if domain == "rg_prevalence":
+        gene = (context.get("gene") or _extract_gene(sql) or "KRAS").upper()
+        studies = context.get("studies") or MATRIX_STUDIES
+        rows = []
+        for study in studies:
+            name, _ = study_info(study)
+            # Wider per-cancer spread than the single-cohort estimate so the
+            # matrix shows biologically plausible variation (a gene is not
+            # equally prevalent across every tumour type).
+            base = gene_frequency(gene, study)
+            spread = _seed_int(gene.upper() + study + "rg", 35, 165) / 100.0
+            freq = max(0.01, min(0.9, round(base * spread, 3)))
+            cohort = _seed_int(study + "cohort", 380, 1080)
+            rows.append({
+                "study": study, "cancer": name,
+                "frequency_pct": round(freq * 100, 1),
+                "mutated": int(cohort * freq), "cohort": cohort,
+            })
+        rows.sort(key=lambda r: r["frequency_pct"], reverse=True)
+        return rows, ["study", "cancer", "frequency_pct", "mutated", "cohort"]
+    if domain == "rg_modality":
+        studies = context.get("studies") or MATRIX_STUDIES
+        collections = context.get("collections") or [study_info(s)[1] for s in studies]
+        rows = []
+        for coll in collections:
+            for mod in _DICOM_MODALITIES:
+                n = max(0, _seed_int(coll + mod, 0, 1400))
+                if n <= 0:
+                    continue
+                rows.append({"collection": coll, "modality": mod, "studies": n})
+        return rows, ["collection", "modality", "studies"]
     if domain in _GENERIC_DOMAINS:
         return _demo_rows_generic(sql, domain, context)
     settings = get_settings()
