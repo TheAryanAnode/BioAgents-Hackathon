@@ -15,6 +15,7 @@ from app.agents.graph_builder import GraphBuilderAgent
 from app.agents.hypothesis import HypothesisAgent
 from app.agents.ingestion import IngestionAgent
 from app.agents.enrich import enrich_hypothesis
+from app.agents.investigation import investigate as investigate_hypothesis
 from app.agents.orchestrator import get_context, make_context, run_pipeline
 from app.agents.post_upload import after_paper_added
 from app.agents.report import generate as generate_report
@@ -98,6 +99,32 @@ async def enrich_hypothesis_route(session_id: str, hypothesis_id: str):
         "type": "hypotheses",
         "payload": [x.model_dump() for x in ctx.session.state.hypotheses],
     })
+    return h
+
+
+@router.post("/sessions/{session_id}/hypotheses/{hypothesis_id}/investigate")
+async def investigate_route(session_id: str, hypothesis_id: str, force: bool = False):
+    """Run the CRAFT real-world evidence investigation (IDC + PanCancer).
+
+    User-initiated (like enrich): streams each CRAFT tool call over WebSocket as
+    an ``investigation_step`` event, then returns the updated hypothesis.
+    """
+    ctx = get_context(session_id)
+    if not ctx:
+        raise HTTPException(404, "session not ready")
+    h = next((x for x in ctx.session.state.hypotheses if x.id == hypothesis_id), None)
+    if not h:
+        raise HTTPException(404, "hypothesis not found")
+    h = await investigate_hypothesis(ctx, h, force=force)
+    await ctx.session.emit({
+        "type": "hypotheses",
+        "payload": [x.model_dump() for x in ctx.session.state.hypotheses],
+    })
+    if ctx.session.state.dashboard is not None:
+        await ctx.session.emit({
+            "type": "dashboard",
+            "payload": ctx.session.state.dashboard.model_dump(),
+        })
     return h
 
 

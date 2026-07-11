@@ -6,7 +6,7 @@ import { UploadControl } from "../upload/UploadControl";
 import { cn } from "../../lib/utils";
 
 type SourceFilter = "all" | "api" | "user_pdf";
-const TYPES = ["paper", "concept", "author"] as const;
+const TYPES = ["paper", "concept", "author", "dataset"] as const;
 
 export function GraphView() {
   const graph = useStore((s) => s.graph);
@@ -30,9 +30,9 @@ export function GraphView() {
     });
 
   const counts = useMemo(() => {
-    const c = { paper: 0, concept: 0, author: 0, user: 0 };
+    const c = { paper: 0, concept: 0, author: 0, dataset: 0, user: 0 };
     for (const n of graph.nodes) {
-      c[n.type as "paper" | "concept" | "author"]++;
+      c[n.type as "paper" | "concept" | "author" | "dataset"]++;
       if (n.source === "user_pdf") c.user++;
     }
     return c;
@@ -53,7 +53,14 @@ export function GraphView() {
                   : "border-border text-muted-foreground hover:text-foreground",
               )}
             >
-              {t} {t === "paper" ? counts.paper : t === "concept" ? counts.concept : counts.author}
+              {t}{" "}
+              {t === "paper"
+                ? counts.paper
+                : t === "concept"
+                  ? counts.concept
+                  : t === "dataset"
+                    ? counts.dataset
+                    : counts.author}
             </button>
           ))}
         </div>

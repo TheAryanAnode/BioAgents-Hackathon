@@ -22,6 +22,17 @@ class Settings(BaseSettings):
     gemini_quota_cooldown_seconds: float = 55.0
     entrez_email: str = ""
 
+    # CRAFT / Emergence MCP — real-world evidence investigation (IDC + PanCancer).
+    # Without a token the client runs in deterministic demo mode so the feature
+    # always works offline (mirrors the Gemini-optional philosophy).
+    emergence_project_id: str = "1ac58445-c4ad-49db-b392-17c8003729ef"
+    emergence_mcp_url: str = "https://nebius.emergence.ai/mcp"
+    emergence_mcp_token: str = ""
+    craft_pancancer_connection: str = "pancancer-atlas-1-1ac58445"
+    craft_idc_connection: str = "idc-1ac58445"
+    craft_max_queries_per_investigation: int = 6
+    craft_timeout_seconds: float = 30.0
+
     data_dir: str = "./data"
     upload_dir: str = "./data/uploads"
 
@@ -48,6 +59,11 @@ class Settings(BaseSettings):
     @property
     def gemini_enabled(self) -> bool:
         return bool(self.google_api_key.strip())
+
+    @property
+    def craft_live(self) -> bool:
+        """True when a real MCP token is configured; otherwise demo mode."""
+        return bool(self.emergence_mcp_token.strip() and self.emergence_project_id.strip())
 
     def ensure_dirs(self) -> None:
         if self.is_vercel:

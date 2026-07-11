@@ -1,5 +1,12 @@
-export type NodeType = "paper" | "concept" | "author";
-export type SourceType = "semantic_scholar" | "pubmed" | "arxiv" | "user_pdf" | "derived";
+export type NodeType = "paper" | "concept" | "author" | "dataset";
+export type SourceType =
+  | "semantic_scholar"
+  | "pubmed"
+  | "arxiv"
+  | "user_pdf"
+  | "derived"
+  | "craft_pancancer"
+  | "craft_idc";
 
 export interface GraphNode {
   id: string;
@@ -41,6 +48,9 @@ export interface EvidenceItem {
   snippet: string;
   year?: number;
   url?: string;
+  rowCount?: number;
+  sql?: string;
+  connection?: string;
 }
 
 export interface ConfidencePoint {
@@ -82,6 +92,67 @@ export interface HypothesisOpportunity {
   whitespace: number;
 }
 
+export type InvestigationPhase =
+  | "plan"
+  | "schema"
+  | "term"
+  | "query"
+  | "chart"
+  | "synthesis";
+
+export interface InvestigationStep {
+  id: string;
+  phase: InvestigationPhase;
+  agent: string;
+  question: string;
+  tool: string;
+  connection?: string;
+  toolInput?: Record<string, unknown>;
+  toolOutput?: Record<string, unknown>;
+  sql?: string;
+  rowCount?: number | null;
+  live?: boolean;
+  status: "running" | "ok" | "error";
+  durationMs?: number | null;
+}
+
+export interface InvestigationScore {
+  literature: number;
+  genomics: number;
+  imaging: number;
+  revised: number;
+}
+
+export interface PlotlyFigure {
+  data: Array<Record<string, unknown>>;
+  layout?: Record<string, unknown>;
+}
+
+export interface InvestigationResult {
+  id: string;
+  hypothesisId: string;
+  steps: InvestigationStep[];
+  finding: string;
+  findingConfidence: number;
+  divergence?: string;
+  charts: PlotlyFigure[];
+  dataEvidence: EvidenceItem[];
+  score: InvestigationScore;
+  revisedConfidence?: number | null;
+  cohortSize?: number;
+  live?: boolean;
+  completedAt?: string;
+  geneA?: string;
+  geneB?: string;
+  study?: string;
+  cancerName?: string;
+  mutationFreqPct?: number;
+  coRatePct?: number;
+  topModality?: string;
+  totalStudies?: number;
+  measurements?: number;
+}
+
 export interface Hypothesis {
   id: string;
   statement: string;
@@ -97,6 +168,8 @@ export interface Hypothesis {
   confidenceBreakdown?: ConfidenceBreakdown;
   opportunity?: HypothesisOpportunity;
   geminiEnriched?: boolean;
+  craftInvestigated?: boolean;
+  investigation?: InvestigationResult | null;
 }
 
 export interface ReportSection {
@@ -205,6 +278,7 @@ export interface WsEvent {
     | "done"
     | "error"
     | "ping"
-    | "snapshot";
+    | "snapshot"
+    | "investigation_step";
   payload: any;
 }

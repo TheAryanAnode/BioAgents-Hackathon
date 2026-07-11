@@ -1,15 +1,14 @@
 import { useEffect } from "react";
-import { Landing } from "./pages/Landing";
 import { Workspace } from "./layouts/Workspace";
 import { useStore } from "./stores/useStore";
 import { api } from "./lib/api";
 
 export default function App() {
-  const sessionId = useStore((s) => s.sessionId);
   const setSession = useStore((s) => s.setSession);
   const setQuery = useStore((s) => s.setQuery);
   const setRunning = useStore((s) => s.setRunning);
   const setGemini = useStore((s) => s.setGemini);
+  const setView = useStore((s) => s.setView);
   const reset = useStore((s) => s.reset);
   const geminiLive = useStore((s) => s.geminiLive);
 
@@ -20,10 +19,34 @@ export default function App() {
       .catch(() => setGemini(false));
   }, [setGemini]);
 
+  // Pointer-reactive aurora: drive the radial-gradient origin from the cursor.
+  // rAF-throttled and writes two CSS vars only — negligible cost.
+  useEffect(() => {
+    let raf = 0;
+    let x = 0;
+    let y = 0;
+    const onMove = (e: PointerEvent) => {
+      x = e.clientX - window.innerWidth / 2;
+      y = e.clientY - window.innerHeight / 2;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        document.body.style.setProperty("--posX", String(x));
+        document.body.style.setProperty("--posY", String(y));
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   const start = async (query: string) => {
     reset();
     setQuery(query);
     setRunning(true);
+    setView("graph");
     useStore.setState({ stage: "ingestion" });
     try {
       const { sessionId } = await api.startResearch(query);
@@ -34,20 +57,11 @@ export default function App() {
     }
   };
 
-  const goHome = () => {
-    setSession("");
-    useStore.setState({ sessionId: null });
-    reset();
-    setQuery("");
-  };
-
   return (
     <div className="grain min-h-screen">
-      {sessionId ? (
-        <Workspace onHome={goHome} />
-      ) : (
-        <Landing onStart={start} geminiLive={geminiLive} />
-      )}
+      <div className="aurora" aria-hidden />
+      <div className="aurora-scrim" aria-hidden />
+      <Workspace onStart={start} geminiLive={geminiLive} />
     </div>
   );
 }

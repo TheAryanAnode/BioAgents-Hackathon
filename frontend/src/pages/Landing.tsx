@@ -6,10 +6,10 @@ import { Button } from "../components/ui/Button";
 import { SynthesisLogo } from "../components/ui/SynthesisLogo";
 
 const EXAMPLES = [
-  "autism genomics",
+  "KRAS G12C lung cancer resistance",
+  "CDH1 breast cancer invasion",
   "GLP-1 and neuroinflammation",
   "tau propagation in Alzheimer's",
-  "KRAS G12C resistance",
 ];
 
 export function Landing({
@@ -27,8 +27,8 @@ export function Landing({
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col justify-center px-6 py-20 md:px-12 lg:px-16">
-      <div className="pointer-events-none absolute right-4 top-24 -z-10 select-none font-mono text-[18vw] leading-none text-muted opacity-40 md:text-[14vw]">
+    <div className="relative flex h-full flex-col justify-center overflow-y-auto px-6 py-20 md:px-12 lg:px-16">
+      <div className="pointer-events-none absolute right-4 top-24 -z-10 select-none font-mono text-[18vw] leading-none text-muted opacity-30 md:text-[14vw]">
         01
       </div>
 
@@ -44,19 +44,20 @@ export function Landing({
 
           <div className="mb-6 flex items-center gap-3">
             <span className="h-1 w-16 bg-accent" />
-            <span className="label-mono">Track 02 — Autonomous Research</span>
+            <span className="label-mono">Emergence Hackathon — Autonomous Investigation</span>
           </div>
 
           <h1 className="max-w-5xl text-balance font-sans text-5xl font-extrabold leading-none tracking-tighter md:text-7xl lg:text-8xl">
-            SYNTHESIZE
+            YOU DON'T QUERY DATA.
             <br />
-            THE <span className="text-accent">UNKNOWN</span>
+            YOU <span className="text-accent">INVESTIGATE</span> IT.
           </h1>
 
           <p className="mt-8 max-w-2xl text-lg leading-normal text-muted-foreground md:text-xl">
-            An autonomous agent that ingests scientific literature, maps it into a
-            living knowledge graph, generates novel hypotheses, and surfaces the
-            commercial opportunities experts are structurally unable to see.
+            Literature finds the hypothesis. CRAFT investigates the patients. An
+            autonomous agent maps the literature into a knowledge graph, finds a
+            structural gap, then interrogates PanCancer genomics and IDC imaging to
+            deliver an actionable radiogenomics finding — with full SQL provenance.
           </p>
         </motion.div>
 

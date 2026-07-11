@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { FileText, Loader2, Sparkles } from "lucide-react";
+import { FileText, FlaskConical, Loader2, Sparkles } from "lucide-react";
 import { useStore } from "../../stores/useStore";
 import { api } from "../../lib/api";
 import { Button } from "../ui/Button";
@@ -22,6 +22,8 @@ import { ConfidenceExplainer } from "./ConfidenceExplainer";
 import { HypothesisMiniGraph } from "./HypothesisMiniGraph";
 import { ReportModal } from "./ReportModal";
 import { ScientificWhiteboard } from "./ScientificWhiteboard";
+import { InvestigationTimeline } from "../investigation/InvestigationTimeline";
+import { ValidationScorecard } from "../investigation/ValidationScorecard";
 
 export function HypothesisPanel() {
   const hypotheses = useStore((s) => s.hypotheses);
@@ -30,9 +32,12 @@ export function HypothesisPanel() {
   const sessionId = useStore((s) => s.sessionId);
   const geminiLive = useStore((s) => s.geminiLive);
   const applyEvent = useStore((s) => s.applyEvent);
+  const startInvestigation = useStore((s) => s.startInvestigation);
+  const endInvestigation = useStore((s) => s.endInvestigation);
   const [busy, setBusy] = useState(false);
   const [enrichBusy, setEnrichBusy] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
+  const [investigateBusy, setInvestigateBusy] = useState(false);
   const [report, setReport] = useState<HypothesisReport | null>(null);
   const enrichingRef = useRef<string | null>(null);
 
@@ -83,6 +88,26 @@ export function HypothesisPanel() {
       setReport(r);
     } finally {
       setReportBusy(false);
+    }
+  };
+
+  const investigate = async () => {
+    if (!sessionId || !selected) return;
+    const force = Boolean(selected.craftInvestigated);
+    setInvestigateBusy(true);
+    startInvestigation(selected.id);
+    try {
+      const updated = await api.investigateHypothesis(sessionId, selected.id, force);
+      const latest = useStore.getState().hypotheses;
+      applyEvent({
+        type: "hypotheses",
+        payload: latest.map((x) => (x.id === updated.id ? updated : x)),
+      });
+    } catch {
+      /* keep pre-investigation state */
+    } finally {
+      endInvestigation();
+      setInvestigateBusy(false);
     }
   };
 
@@ -158,6 +183,8 @@ export function HypothesisPanel() {
             reportBusy={reportBusy}
             enrichBusy={enrichBusy}
             geminiLive={geminiLive}
+            onInvestigate={investigate}
+            investigateBusy={investigateBusy}
           />
         ) : (
           <div className="flex h-full items-center justify-center">
@@ -179,16 +206,31 @@ function HypothesisDetail({
   reportBusy,
   enrichBusy,
   geminiLive,
+  onInvestigate,
+  investigateBusy,
 }: {
   hypothesis: Hypothesis;
   onGenerateReport: () => void;
   reportBusy: boolean;
   enrichBusy: boolean;
   geminiLive: boolean;
+  onInvestigate: () => void;
+  investigateBusy: boolean;
 }) {
+  const investigatingId = useStore((s) => s.investigatingId);
+  const liveSteps = useStore((s) => s.liveSteps);
   const support = hypothesis.evidence.filter((e) => e.stance === "support");
   const contradict = hypothesis.evidence.filter((e) => e.stance === "contradict");
   const opp = hypothesis.opportunity;
+
+  const isInvestigating = investigatingId === hypothesis.id && investigateBusy;
+  const finalInvestigation = hypothesis.investigation ?? null;
+  const timelineSteps = finalInvestigation
+    ? finalInvestigation.steps
+    : isInvestigating
+      ? liveSteps
+      : [];
+  const showTimeline = timelineSteps.length > 0 || isInvestigating;
 
   return (
     <div className="space-y-8 p-6 md:p-8">
@@ -231,6 +273,14 @@ function HypothesisDetail({
       </div>
 
       <ConfidenceExplainer hypothesis={hypothesis} />
+
+      {finalInvestigation && (
+        <ValidationScorecard investigation={finalInvestigation} />
+      )}
+
+      {showTimeline && (
+        <InvestigationTimeline steps={timelineSteps} running={isInvestigating} />
+      )}
 
       {contradict.length > 0 && (
         <ConflictAlert
@@ -315,7 +365,25 @@ function HypothesisDetail({
         <Metric label="Supporting" value={`${support.length}`} />
         <Metric label="Contradicting" value={`${contradict.length}`} />
         <Metric label="Status" value={hypothesis.status} />
-        <div className="ml-auto">
+        <div className="ml-auto flex flex-wrap items-center gap-6">
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={onInvestigate}
+            disabled={investigateBusy}
+            pulse={investigateBusy}
+          >
+            {investigateBusy ? (
+              <>
+                <Loader2 size={14} className="animate-spin" /> Investigating with CRAFT
+              </>
+            ) : (
+              <>
+                <FlaskConical size={14} strokeWidth={1.5} />{" "}
+                {hypothesis.craftInvestigated ? "Re-investigate with CRAFT" : "Investigate with CRAFT"}
+              </>
+            )}
+          </Button>
           <Button size="sm" onClick={onGenerateReport} disabled={reportBusy}>
             {reportBusy ? (
               <>
@@ -535,16 +603,22 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
 
 function EvidenceCard({ item }: { item: EvidenceItem }) {
   const tone = item.stance === "support" ? "support" : item.stance === "contradict" ? "contradict" : "muted";
+  const isCraft = item.source === "craft_pancancer" || item.source === "craft_idc";
   return (
-    <Card className="p-4">
+    <Card className={cn("p-4", isCraft && "border-l-2 border-l-accent")}>
       <div className="flex items-start justify-between gap-3">
-        <PaperLink title={item.title} url={item.url} className="text-sm font-semibold leading-snug" />
+        {isCraft ? (
+          <span className="text-sm font-semibold leading-snug text-foreground">{item.title}</span>
+        ) : (
+          <PaperLink title={item.title} url={item.url} className="text-sm font-semibold leading-snug" />
+        )}
         <Badge tone={tone}>{item.stance}</Badge>
       </div>
       <p className="mt-2 text-sm leading-normal text-muted-foreground">“{item.snippet}”</p>
       <div className="mt-3 flex flex-wrap items-center gap-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        <span>{SOURCE_LABEL[item.source] ?? item.source}</span>
+        <span className={cn(isCraft && "text-accent")}>{SOURCE_LABEL[item.source] ?? item.source}</span>
         {item.year && <span>{item.year}</span>}
+        {typeof item.rowCount === "number" && <span>{item.rowCount} rows</span>}
         <span>relevance {(item.relevance * 100).toFixed(0)}</span>
         {item.url && (
           <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-accent underline">

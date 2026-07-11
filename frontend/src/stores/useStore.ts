@@ -6,11 +6,12 @@ import type {
   GraphData,
   GraphNode,
   Hypothesis,
+  InvestigationStep,
   SessionState,
   WsEvent,
 } from "../lib/types";
 
-export type View = "graph" | "hypotheses" | "chat";
+export type View = "home" | "auto" | "graph" | "hypotheses" | "chat";
 export type Stage =
   | "idle"
   | "ingestion"
@@ -40,6 +41,12 @@ interface Store {
   selectedNode: GraphNode | null;
   auditOpen: boolean;
 
+  // Live CRAFT investigation streaming (one at a time, user-initiated).
+  investigatingId: string | null;
+  liveSteps: InvestigationStep[];
+  startInvestigation: (hypothesisId: string) => void;
+  endInvestigation: () => void;
+
   setView: (v: View) => void;
   setQuery: (q: string) => void;
   setSession: (id: string) => void;
@@ -59,7 +66,7 @@ const emptyGraph: GraphData = { nodes: [], links: [], clusters: [] };
 export const useStore = create<Store>((set, get) => ({
   sessionId: null,
   query: "",
-  view: "graph",
+  view: "home",
   stage: "idle",
   running: false,
   geminiLive: false,
@@ -74,6 +81,12 @@ export const useStore = create<Store>((set, get) => ({
 
   selectedNode: null,
   auditOpen: false,
+
+  investigatingId: null,
+  liveSteps: [],
+  startInvestigation: (hypothesisId) =>
+    set({ investigatingId: hypothesisId, liveSteps: [] }),
+  endInvestigation: () => set({ investigatingId: null }),
 
   setView: (v) => set({ view: v }),
   setQuery: (q) => set({ query: q }),
@@ -96,6 +109,8 @@ export const useStore = create<Store>((set, get) => ({
       chat: [],
       selectedNode: null,
       stage: "idle",
+      investigatingId: null,
+      liveSteps: [],
     }),
 
   loadSession: (state) =>
@@ -144,6 +159,9 @@ export const useStore = create<Store>((set, get) => ({
       }
       case "dashboard":
         set({ dashboard: e.payload as DashboardData });
+        break;
+      case "investigation_step":
+        set((s) => ({ liveSteps: [...s.liveSteps, e.payload as InvestigationStep] }));
         break;
       case "done":
         set({ stage: "done", running: false });

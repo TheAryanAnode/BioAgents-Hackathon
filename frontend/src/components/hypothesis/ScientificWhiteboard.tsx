@@ -3,11 +3,40 @@ import type { EvidenceItem, Hypothesis } from "../../lib/types";
 
 type DiagramId = "pathway" | "interaction" | "progression" | "cascade";
 
-const DIAGRAMS: { id: DiagramId; label: string; subtitle: string }[] = [
-  { id: "pathway", label: "Pathway", subtitle: "Entity signaling route" },
-  { id: "interaction", label: "Interactions", subtitle: "Molecular binding map" },
-  { id: "progression", label: "Progression", subtitle: "Disease stage model" },
-  { id: "cascade", label: "Cascade", subtitle: "Protein activation chain" },
+const DIAGRAMS: {
+  id: DiagramId;
+  label: string;
+  subtitle: string;
+  explains: string;
+}[] = [
+  {
+    id: "pathway",
+    label: "Pathway",
+    subtitle: "Entity signaling route",
+    explains:
+      "A directed route A → B → C: how the hypothesis proposes one entity acts on the next in sequence. Arrows read as “influences / signals to”.",
+  },
+  {
+    id: "interaction",
+    label: "Interactions",
+    subtitle: "Molecular binding map",
+    explains:
+      "Which entities interact around a shared bridge node. Dashed lines are putative links; green = a supporting paper exists, red = a conflicting one.",
+  },
+  {
+    id: "progression",
+    label: "Progression",
+    subtitle: "Disease stage model",
+    explains:
+      "Left-to-right disease stages with the confidence trajectory overlaid — how belief in the hypothesis shifts as evidence accumulates (or decays under conflict).",
+  },
+  {
+    id: "cascade",
+    label: "Cascade",
+    subtitle: "Protein activation chain",
+    explains:
+      "A top-down activation chain: each step switches on the next, like a signaling cascade triggered by the lead entity.",
+  },
 ];
 
 /** Deterministic Nature-style figures from hypothesis entities — zero API calls. */
@@ -22,13 +51,17 @@ export function ScientificWhiteboard({ hypothesis }: { hypothesis: Hypothesis })
     hypothesis.confidenceBreakdown?.contradictCount ??
     hypothesis.evidence.filter((e) => e.stance === "contradict").length;
 
+  const activeDiagram = DIAGRAMS.find((d) => d.id === active)!;
+
   return (
     <div className="border border-border bg-[#0F0F0F]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           <span className="label-mono">Scientific whiteboard</span>
           <p className="mt-1 text-xs text-muted-foreground">
-            Auto-generated from gap entities — no extra AI calls
+            Illustrative schematics drawn from the hypothesis' gap entities — hand-drawn
+            style, generated locally with no AI calls or patient data. Use them to
+            picture the mechanism, not as a source of truth.
           </p>
         </div>
         <div className="flex flex-wrap gap-1">
@@ -47,6 +80,16 @@ export function ScientificWhiteboard({ hypothesis }: { hypothesis: Hypothesis })
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Plain-language explanation of the selected diagram. */}
+      <div className="border-b border-border px-4 py-2.5">
+        <p className="text-xs leading-normal text-muted-foreground">
+          <span className="font-mono uppercase tracking-widest text-accent">
+            {activeDiagram.label}
+          </span>{" "}
+          — {activeDiagram.explains}
+        </p>
       </div>
 
       <div className="relative bg-white p-4">

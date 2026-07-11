@@ -47,6 +47,35 @@
 }
 
 @layer components {
+  /* Pointer-reactive aurora gradient behind every page. --posX/--posY are set
+     on <body> from the pointer position and inherited here. A dark scrim keeps
+     the editorial contrast + text readability of the Bold Typography theme. */
+  .aurora {
+    position: fixed;
+    inset: 0;
+    z-index: -20;
+    pointer-events: none;
+    --x: calc(var(--posX, 0) * 1px);
+    --y: calc(var(--posY, 0) * 1px);
+    background-image:
+      linear-gradient(115deg, rgb(211 255 215), rgb(0 0 0)),
+      radial-gradient(90% 100% at calc(50% + var(--x)) calc(0% + var(--y)), rgb(255 77 0), rgb(22 0 45)),
+      radial-gradient(100% 100% at calc(80% - var(--x)) calc(0% - var(--y)), rgb(255 0 0), rgb(36 0 0)),
+      radial-gradient(150% 210% at calc(100% + var(--x)) calc(0% + var(--y)), rgb(20 175 125), rgb(0 10 255)),
+      radial-gradient(100% 100% at calc(100% - var(--x)) calc(30% - var(--y)), rgb(255 77 0), rgb(0 200 255)),
+      linear-gradient(60deg, rgb(255 85 0), rgb(120 86 255));
+    background-blend-mode: overlay, overlay, difference, difference, difference, normal;
+    transition: background-position 0.2s ease-out;
+  }
+  /* Darkening scrim so dense UI stays legible; lower opacity = more color. */
+  .aurora-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    pointer-events: none;
+    background: radial-gradient(120% 120% at 50% 0%, rgba(10, 10, 10, 0.62), rgba(10, 10, 10, 0.86));
+  }
+
   /* Subtle fractal-noise grain overlay across the entire page (1.5% opacity). */
   .grain::after {
     content: "";

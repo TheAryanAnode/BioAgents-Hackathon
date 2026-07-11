@@ -6,6 +6,7 @@ export const GRAPH_COLORS = {
   support: "#34D399",
   contradict: "#F87171",
   muted: "#737373",
+  dataset: "#22D3EE", // CRAFT real-world-evidence nodes (IDC / PanCancer)
 } as const;
 
 export function drawNodeGlow(

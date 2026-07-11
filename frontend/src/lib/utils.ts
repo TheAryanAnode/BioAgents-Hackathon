@@ -32,4 +32,6 @@ export const SOURCE_LABEL: Record<string, string> = {
   arxiv: "arXiv",
   user_pdf: "USER",
   derived: "Derived",
+  craft_pancancer: "CRAFT · PanCancer",
+  craft_idc: "CRAFT · IDC",
 };

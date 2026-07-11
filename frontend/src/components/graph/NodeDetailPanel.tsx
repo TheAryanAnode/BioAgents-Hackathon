@@ -21,8 +21,16 @@ export function NodeDetailPanel() {
         >
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <div className="flex items-center gap-2">
-              <Badge tone={node.type === "concept" ? "accent" : "muted"}>
-                {node.type}
+              <Badge
+                tone={
+                  node.type === "concept"
+                    ? "accent"
+                    : node.type === "dataset"
+                      ? "support"
+                      : "muted"
+                }
+              >
+                {node.type === "dataset" ? "CRAFT dataset" : node.type}
               </Badge>
               {node.source && (
                 <Badge tone={node.source === "user_pdf" ? "support" : "muted"}>

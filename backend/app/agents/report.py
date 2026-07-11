@@ -140,6 +140,33 @@ def _knowledge_gaps_section(h: Hypothesis, ctx: AgentContext, query: str) -> Rep
     )
 
 
+def _investigation_section(h: Hypothesis) -> ReportSection | None:
+    """Real-world evidence section — only when a CRAFT investigation has run."""
+    inv = h.investigation
+    if inv is None:
+        return None
+    sql_calls = sum(1 for s in inv.steps if s.tool == "execute_query")
+    mode = "live CRAFT connections" if inv.live else "CRAFT semantic layer (demo data)"
+    bullets = [
+        f"Genomics score {inv.score.genomics}/100 · imaging feasibility {inv.score.imaging}/100 · "
+        f"revised confidence {inv.score.revised}%.",
+        f"{inv.geneA} mutation frequency {inv.mutationFreqPct:.1f}% in {inv.study}; "
+        f"{inv.geneA}+{inv.geneB} co-alteration {inv.coRatePct:.1f}%.",
+        f"Imaging: {inv.totalStudies} studies (top modality {inv.topModality}); "
+        f"{inv.measurements} patients with quantitative measurements.",
+        f"Provenance: {sql_calls} SQL queries executed via {mode}; every call in the audit log.",
+    ]
+    if inv.divergence:
+        bullets.append(f"Divergence: {inv.divergence}")
+    return ReportSection(
+        id="rwe",
+        title="Real-World Evidence Investigation (CRAFT)",
+        body=inv.finding,
+        bullets=bullets,
+        highlight=f"Revised confidence {inv.score.revised}% · cohort n={inv.cohortSize}",
+    )
+
+
 def _fallback_sections(h: Hypothesis, ctx: AgentContext, opp, funding: int, query: str) -> list[ReportSection]:
     support = [e for e in h.evidence if e.stance == "support"]
     contradict = [e for e in h.evidence if e.stance == "contradict"]
@@ -390,6 +417,12 @@ Be specific, quantitative where possible, and actionable. Note uncertainties exp
             "roi": f"{opp.roiScore if opp else 0}/100",
             "timeline": f"{timeline} months",
         }
+
+    # Inject the real-world evidence section (after commercial) when present.
+    rwe = _investigation_section(h)
+    if rwe is not None and not any(s.id == "rwe" for s in sections):
+        idx = next((i for i, s in enumerate(sections) if s.id == "commercial"), len(sections) - 1)
+        sections.insert(idx + 1, rwe)
 
     refs = _references(h)
     plaintext = _sections_to_plaintext(title, sections, refs)

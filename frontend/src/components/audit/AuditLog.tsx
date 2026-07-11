@@ -12,12 +12,21 @@ export function AuditLog() {
   const query = useStore((s) => s.query);
   const [agentFilter, setAgentFilter] = useState<string>("all");
 
-  const agents = useMemo(
-    () => ["all", ...Array.from(new Set(audit.map((a) => a.agent)))],
-    [audit],
-  );
-  const filtered = audit.filter(
-    (a) => agentFilter === "all" || a.agent === agentFilter,
+  const agents = useMemo(() => {
+    const set = new Set<string>();
+    let hasCraft = false;
+    audit.forEach((a) => {
+      if (a.agent.startsWith("craft_")) hasCraft = true;
+      else set.add(a.agent);
+    });
+    return ["all", ...(hasCraft ? ["CRAFT"] : []), ...Array.from(set)];
+  }, [audit]);
+  const filtered = audit.filter((a) =>
+    agentFilter === "all"
+      ? true
+      : agentFilter === "CRAFT"
+        ? a.agent.startsWith("craft_")
+        : a.agent === agentFilter,
   );
 
   const exportJson = () => {
@@ -104,6 +113,8 @@ export function AuditLog() {
 function AuditRow({ entry }: { entry: AuditEntry }) {
   const [open, setOpen] = useState(false);
   const hasDetail = entry.params && Object.keys(entry.params).length > 0;
+  const isCraft = entry.agent.startsWith("craft_");
+  const sql = typeof entry.params?.sql === "string" ? (entry.params.sql as string) : "";
   return (
     <div className="border-b border-border/50">
       <button
@@ -116,9 +127,11 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
             "shrink-0 uppercase tracking-widest",
             entry.status === "error"
               ? "text-contradict"
-              : entry.status === "running"
+              : isCraft
                 ? "text-accent"
-                : "text-support",
+                : entry.status === "running"
+                  ? "text-accent"
+                  : "text-support",
           )}
         >
           {entry.agent}
@@ -137,9 +150,16 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
         )}
       </button>
       {open && hasDetail && (
-        <pre className="overflow-x-auto bg-background px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
-          {JSON.stringify(entry.params, null, 2)}
-        </pre>
+        <div className="bg-background px-4 py-3">
+          {sql && (
+            <pre className="mb-2 overflow-x-auto border-l-2 border-accent bg-card px-3 py-2 text-[11px] leading-relaxed text-foreground">
+              {sql}
+            </pre>
+          )}
+          <pre className="overflow-x-auto text-[11px] leading-relaxed text-muted-foreground">
+            {JSON.stringify(entry.params, null, 2)}
+          </pre>
+        </div>
       )}
     </div>
   );

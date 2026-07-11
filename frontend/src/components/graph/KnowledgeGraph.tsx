@@ -11,6 +11,7 @@ import {
 
 const TYPE_BASE_SIZE: Record<string, number> = {
   concept: 7,
+  dataset: 8,
   paper: 4.5,
   author: 3,
 };
@@ -19,6 +20,7 @@ const ACCENT = GRAPH_COLORS.accent;
 const FG = GRAPH_COLORS.fg;
 const MUTED = GRAPH_COLORS.muted;
 const SUPPORT = GRAPH_COLORS.support;
+const DATASET = GRAPH_COLORS.dataset;
 
 export function KnowledgeGraph({
   filter,
@@ -154,13 +156,18 @@ export function KnowledgeGraph({
             const dim = focusSet ? !focusSet.has(n.id) : false;
 
             let color: string = MUTED;
-            if (n.type === "concept") color = ACCENT;
+            if (n.type === "dataset") color = DATASET;
+            else if (n.type === "concept") color = ACCENT;
             else if (n.type === "paper") color = n.source === "user_pdf" ? SUPPORT : FG;
             else color = MUTED;
 
             if (!dim) {
               const glowIntensity =
-                n.type === "concept" ? "high" : n.source === "user_pdf" ? "medium" : "low";
+                n.type === "concept" || n.type === "dataset"
+                  ? "high"
+                  : n.source === "user_pdf"
+                    ? "medium"
+                    : "low";
               drawNodeGlow(ctx, n.x, n.y, r, color, scale, glowIntensity);
             }
             ctx.globalAlpha = dim ? 0.18 : 1;
@@ -172,6 +179,12 @@ export function KnowledgeGraph({
               ctx.strokeStyle = SUPPORT;
               ctx.stroke();
             }
+            // CRAFT dataset nodes get a square marker ring to read as "data, not paper".
+            if (n.type === "dataset") {
+              ctx.lineWidth = 1.5 / scale;
+              ctx.strokeStyle = DATASET;
+              ctx.strokeRect(n.x - r - 2, n.y - r - 2, (r + 2) * 2, (r + 2) * 2);
+            }
             if (selectedNode?.id === n.id) {
               ctx.lineWidth = 2 / scale;
               ctx.strokeStyle = ACCENT;
@@ -180,13 +193,15 @@ export function KnowledgeGraph({
               ctx.stroke();
             }
 
-            // Labels appear for concepts always, others when zoomed/focused.
+            // Labels appear for concepts + CRAFT datasets always, others when zoomed/focused.
+            const alwaysLabel = n.type === "concept" || n.type === "dataset";
             const showLabel =
-              n.type === "concept" || scale > 2.2 || (focusSet && focusSet.has(n.id));
+              alwaysLabel || scale > 2.2 || (focusSet && focusSet.has(n.id));
             if (showLabel && !dim) {
-              const fontSize = Math.max(2.5, (n.type === "concept" ? 4 : 3));
-              ctx.font = `${n.type === "concept" ? "600 " : ""}${fontSize}px "Inter Tight", sans-serif`;
-              ctx.fillStyle = n.type === "concept" ? ACCENT : FG;
+              const fontSize = Math.max(2.5, alwaysLabel ? 4 : 3);
+              ctx.font = `${alwaysLabel ? "600 " : ""}${fontSize}px "Inter Tight", sans-serif`;
+              ctx.fillStyle =
+                n.type === "concept" ? ACCENT : n.type === "dataset" ? DATASET : FG;
               ctx.textAlign = "center";
               ctx.textBaseline = "top";
               const text =
@@ -238,6 +253,7 @@ function Legend() {
     { c: "#FF3D00", t: "Concept" },
     { c: "#FAFAFA", t: "Paper" },
     { c: "#34D399", t: "Your upload" },
+    { c: "#22D3EE", t: "CRAFT data" },
     { c: "#737373", t: "Author" },
   ];
   return (

@@ -77,6 +77,7 @@ export const REPORT_SECTION_ORDER = [
   "evidence",
   "population",
   "commercial",
+  "rwe",
   "validation",
   "budget",
   "regulatory",

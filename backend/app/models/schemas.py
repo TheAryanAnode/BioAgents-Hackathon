@@ -4,8 +4,11 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-SourceType = Literal["semantic_scholar", "pubmed", "arxiv", "user_pdf", "derived"]
-NodeType = Literal["paper", "concept", "author"]
+SourceType = Literal[
+    "semantic_scholar", "pubmed", "arxiv", "user_pdf", "derived",
+    "craft_pancancer", "craft_idc",
+]
+NodeType = Literal["paper", "concept", "author", "dataset"]
 Stance = Literal["support", "contradict", "neutral"]
 
 
@@ -67,6 +70,10 @@ class EvidenceItem(BaseModel):
     snippet: str
     year: Optional[int] = None
     url: Optional[str] = None
+    # Populated for CRAFT real-world-evidence rows (patient-data, not papers).
+    rowCount: Optional[int] = None
+    sql: Optional[str] = None
+    connection: Optional[str] = None
 
 
 class ConfidenceBreakdown(BaseModel):
@@ -108,6 +115,62 @@ class ConfidencePoint(BaseModel):
     confidence: int
 
 
+InvestigationPhase = Literal["plan", "schema", "term", "query", "chart", "synthesis"]
+
+
+class InvestigationStep(BaseModel):
+    """One CRAFT tool call in the investigation, captured for the live timeline."""
+
+    id: str
+    phase: InvestigationPhase
+    agent: str            # craft_planner | craft_pancancer | craft_imaging | craft_synthesizer
+    question: str         # why this step runs (human-readable)
+    tool: str             # search_schema | resolve_term | generate_sql | execute_query | ...
+    connection: str = ""  # CRAFT connection slug when applicable
+    toolInput: dict = Field(default_factory=dict)
+    toolOutput: dict = Field(default_factory=dict)
+    sql: str = ""
+    rowCount: Optional[int] = None
+    live: bool = False     # True when a real MCP call served this step
+    status: Literal["running", "ok", "error"] = "ok"
+    durationMs: Optional[int] = None
+
+
+class InvestigationScore(BaseModel):
+    """Tri-modal validation scorecard shown alongside literature confidence."""
+
+    literature: int = 0    # existing literature-derived confidence
+    genomics: int = 0      # PanCancer evidence strength
+    imaging: int = 0       # IDC imaging feasibility
+    revised: int = 0       # blended, revised hypothesis confidence
+
+
+class InvestigationResult(BaseModel):
+    id: str
+    hypothesisId: str
+    steps: list[InvestigationStep] = Field(default_factory=list)
+    finding: str = ""                  # actionable radiogenomics insight
+    findingConfidence: int = 0
+    divergence: str = ""               # where literature and patient data disagree
+    charts: list[dict] = Field(default_factory=list)  # Plotly figure specs
+    dataEvidence: list["EvidenceItem"] = Field(default_factory=list)
+    score: InvestigationScore = Field(default_factory=InvestigationScore)
+    revisedConfidence: Optional[int] = None
+    cohortSize: int = 0
+    live: bool = False
+    completedAt: str = ""
+    # Investigation subject + key measured figures (for commercial + report).
+    geneA: str = ""
+    geneB: str = ""
+    study: str = ""
+    cancerName: str = ""
+    mutationFreqPct: float = 0.0
+    coRatePct: float = 0.0
+    topModality: str = ""
+    totalStudies: int = 0
+    measurements: int = 0
+
+
 class Hypothesis(BaseModel):
     id: str
     statement: str
@@ -123,6 +186,8 @@ class Hypothesis(BaseModel):
     confidenceBreakdown: Optional[ConfidenceBreakdown] = None
     opportunity: Optional[HypothesisOpportunity] = None
     geminiEnriched: bool = False
+    craftInvestigated: bool = False
+    investigation: Optional[InvestigationResult] = None
 
 
 class ReportSection(BaseModel):

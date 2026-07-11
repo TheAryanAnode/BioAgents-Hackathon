@@ -68,6 +68,21 @@ export const api = {
     );
   },
 
+  /** User-initiated CRAFT real-world evidence investigation (IDC + PanCancer). */
+  async investigateHypothesis(
+    sessionId: string,
+    hypothesisId: string,
+    force = false,
+  ): Promise<Hypothesis> {
+    const qs = force ? "?force=true" : "";
+    return json(
+      await fetch(
+        `${BASE}/sessions/${sessionId}/hypotheses/${hypothesisId}/investigate${qs}`,
+        { method: "POST" },
+      ),
+    );
+  },
+
   async chat(
     sessionId: string,
     message: string,
