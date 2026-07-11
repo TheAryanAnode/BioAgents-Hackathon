@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     emergence_mcp_token: str = ""
     craft_pancancer_connection: str = "pancancer-atlas-1-1ac58445"
     craft_idc_connection: str = "idc-1ac58445"
+    # Other Spider-2.0 connections used by the chat text-to-SQL router. These are
+    # best-guess default slugs; when a live token is set, the exact slug is
+    # resolved at runtime via list_data_connections (name/description match).
+    craft_ecommerce_connection: str = "thelook-ecommerce-1ac58445"
+    craft_ecommerce_br_connection: str = "brazilian-e-commerce-1ac58445"
+    craft_crypto_connection: str = "crypto-1ac58445"
+    craft_ga4_connection: str = "ga4-1ac58445"
+    craft_firebase_connection: str = "firebase-1ac58445"
+    craft_github_connection: str = "github-repos-1ac58445"
+    craft_deps_connection: str = "deps-dev-v1-1ac58445"
     craft_max_queries_per_investigation: int = 6
     craft_timeout_seconds: float = 30.0
 

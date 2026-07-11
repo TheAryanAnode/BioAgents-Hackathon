@@ -40,31 +40,45 @@ export function HypothesisPanel() {
   const [investigateBusy, setInvestigateBusy] = useState(false);
   const [report, setReport] = useState<HypothesisReport | null>(null);
   const enrichingRef = useRef<string | null>(null);
+  const investigatingRef = useRef<string | null>(null);
 
   const selected =
     hypotheses.find((h) => h.id === selectedId) ?? hypotheses[0] ?? null;
 
-  /** Gemini runs only when the user explicitly clicks a hypothesis card. */
+  /**
+   * Clicking a hypothesis card selects it, refines it with Gemini (if live),
+   * and automatically kicks off the CRAFT investigation once per hypothesis.
+   * The investigation works in demo mode too, so this always produces the
+   * tri-modal scorecard + timeline without the user hunting for a button.
+   */
   const selectHypothesis = async (id: string) => {
     select(id);
     const h = hypotheses.find((x) => x.id === id);
-    if (!sessionId || !h || h.geminiEnriched || !geminiLive) return;
-    if (enrichingRef.current === id) return;
+    if (!sessionId || !h) return;
 
-    enrichingRef.current = id;
-    setEnrichBusy(true);
-    try {
-      const enriched = await api.enrichHypothesis(sessionId, id);
-      const latest = useStore.getState().hypotheses;
-      applyEvent({
-        type: "hypotheses",
-        payload: latest.map((x) => (x.id === id ? enriched : x)),
-      });
-    } catch {
-      /* keep heuristic version */
-    } finally {
-      enrichingRef.current = null;
-      setEnrichBusy(false);
+    // Gemini enrichment (only when live + not already enriched).
+    if (geminiLive && !h.geminiEnriched && enrichingRef.current !== id) {
+      enrichingRef.current = id;
+      setEnrichBusy(true);
+      try {
+        const enriched = await api.enrichHypothesis(sessionId, id);
+        const latest = useStore.getState().hypotheses;
+        applyEvent({
+          type: "hypotheses",
+          payload: latest.map((x) => (x.id === id ? enriched : x)),
+        });
+      } catch {
+        /* keep heuristic version */
+      } finally {
+        enrichingRef.current = null;
+        setEnrichBusy(false);
+      }
+    }
+
+    // Auto-trigger the CRAFT investigation (once per hypothesis).
+    const current = useStore.getState().hypotheses.find((x) => x.id === id);
+    if (current && !current.craftInvestigated) {
+      void investigate(id);
     }
   };
 
@@ -91,13 +105,19 @@ export function HypothesisPanel() {
     }
   };
 
-  const investigate = async () => {
-    if (!sessionId || !selected) return;
-    const force = Boolean(selected.craftInvestigated);
+  const investigate = async (targetId?: string) => {
+    const hyp = targetId
+      ? hypotheses.find((x) => x.id === targetId) ?? selected
+      : selected;
+    if (!sessionId || !hyp) return;
+    // Guard against duplicate runs (auto-trigger + manual button).
+    if (investigatingRef.current === hyp.id) return;
+    const force = Boolean(hyp.craftInvestigated);
+    investigatingRef.current = hyp.id;
     setInvestigateBusy(true);
-    startInvestigation(selected.id);
+    startInvestigation(hyp.id);
     try {
-      const updated = await api.investigateHypothesis(sessionId, selected.id, force);
+      const updated = await api.investigateHypothesis(sessionId, hyp.id, force);
       const latest = useStore.getState().hypotheses;
       applyEvent({
         type: "hypotheses",
@@ -106,6 +126,7 @@ export function HypothesisPanel() {
     } catch {
       /* keep pre-investigation state */
     } finally {
+      investigatingRef.current = null;
       endInvestigation();
       setInvestigateBusy(false);
     }
@@ -183,7 +204,7 @@ export function HypothesisPanel() {
             reportBusy={reportBusy}
             enrichBusy={enrichBusy}
             geminiLive={geminiLive}
-            onInvestigate={investigate}
+            onInvestigate={() => void investigate(selected.id)}
             investigateBusy={investigateBusy}
           />
         ) : (

@@ -112,6 +112,7 @@ class CraftMCP:
         self._session_id: Optional[str] = None
         self._rpc_id = 0
         self._client: Optional[httpx.AsyncClient] = None
+        self._connections_cache: Optional[list[dict]] = None
 
     @property
     def live(self) -> bool:
@@ -198,6 +199,8 @@ class CraftMCP:
         if self._client is not None:
             await self._client.aclose()
             self._client = None
+        # Reset the handshake so a subsequent call re-initializes cleanly.
+        self._session_id = None
 
     async def _call(self, tool: str, args: dict, demo_fn) -> CraftResult:
         """Dispatch to live MCP or the deterministic demo generator on any failure."""
@@ -227,6 +230,39 @@ class CraftMCP:
             }
         return await self._call("list_databases", {}, demo)
 
+    async def list_data_connections(self, search: Optional[str] = None) -> CraftResult:
+        def demo():
+            return {"connections": _DEMO_CONNECTIONS(self.settings)}
+        args: dict = {}
+        if search:
+            args["search"] = search
+        return await self._call("list_data_connections", args, demo)
+
+    async def resolve_connection(self, default_slug: str, search_terms: list[str]) -> str:
+        """Resolve a domain to a real connection slug (live) or the configured default.
+
+        In live mode we fetch the project's connections once and match by
+        slug/name/description so we never rely on a guessed slug. Any failure
+        falls back to the configured default so chat still answers.
+        """
+        if not self.live:
+            return default_slug
+        try:
+            if self._connections_cache is None:
+                res = await self.list_data_connections()
+                self._connections_cache = list(res.get("connections") or [])
+            for term in search_terms:
+                t = term.lower()
+                for c in self._connections_cache:
+                    hay = " ".join(
+                        str(c.get(k, "")) for k in ("slug", "name", "description")
+                    ).lower()
+                    if t in hay:
+                        return str(c.get("slug") or default_slug)
+        except Exception:
+            pass
+        return default_slug
+
     async def search_schema(self, query: str, connection: str) -> CraftResult:
         def demo():
             tables = PANCANCER_TABLES if connection == self.settings.craft_pancancer_connection else IDC_TABLES
@@ -253,17 +289,17 @@ class CraftMCP:
             return {"term": term, "definition": definition}
         return await self._call("resolve_term", {"term": term}, demo)
 
-    async def generate_sql(self, question: str, connection: str) -> CraftResult:
+    async def generate_sql(self, question: str, connection: str, domain: Optional[str] = None) -> CraftResult:
         def demo():
-            return {"question": question, "connection": connection, "sql": _demo_sql(question, connection),
+            return {"question": question, "connection": connection, "sql": _demo_sql(question, connection, domain),
                     "explanation": f"Generated SQL for: {question}"}
         return await self._call(
             "generate_sql", {"question": question, "connection": connection, "schema": _schema_hint(connection, self.settings)}, demo
         )
 
-    async def execute_query(self, sql: str, connection: str, context: Optional[dict] = None) -> CraftResult:
+    async def execute_query(self, sql: str, connection: str, context: Optional[dict] = None, domain: Optional[str] = None) -> CraftResult:
         def demo():
-            rows, columns = _demo_rows(sql, connection, context or {})
+            rows, columns = _demo_rows(sql, connection, context or {}, domain)
             return {"sql": sql, "connection": connection, "columns": columns,
                     "rows": rows, "rowCount": len(rows)}
         return await self._call("execute_query", {"sql": sql, "connection": connection}, demo)
@@ -331,7 +367,9 @@ def _extract_gene(text: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def _demo_sql(question: str, connection: str) -> str:
+def _demo_sql(question: str, connection: str, domain: Optional[str] = None) -> str:
+    if domain in _GENERIC_DOMAINS:
+        return _demo_sql_generic(question, domain)
     settings = get_settings()
     study, _, collection = resolve_cancer(question)
     gene = _extract_gene(question) or "KRAS"
@@ -378,7 +416,9 @@ def _demo_sql(question: str, connection: str) -> str:
     )
 
 
-def _demo_rows(sql: str, connection: str, context: dict) -> tuple[list[dict], list[str]]:
+def _demo_rows(sql: str, connection: str, context: dict, domain: Optional[str] = None) -> tuple[list[dict], list[str]]:
+    if domain in _GENERIC_DOMAINS:
+        return _demo_rows_generic(sql, domain, context)
     settings = get_settings()
     study = context.get("study") or resolve_cancer(sql)[0]
     gene = context.get("gene") or _extract_gene(sql) or "KRAS"
@@ -442,6 +482,124 @@ def _demo_figure(data: list[dict], chart_type: str, options: dict) -> dict:
             "yaxis": {"title": options.get("y_label", y_key), "gridcolor": "#262626"},
         },
     }
+
+
+# ---- Generic (non-medical) demo generators ------------------------------
+# The chat text-to-SQL router can target any of the Spider-2.0 connections.
+# These produce deterministic, plausible aggregates so demo mode always
+# returns a real-looking answer for the ecommerce / crypto / analytics /
+# supply-chain databases.
+
+_GENERIC_DOMAINS = {"ecommerce", "crypto", "analytics", "supply_chain"}
+
+
+def _DEMO_CONNECTIONS(settings) -> list[dict]:
+    return [
+        {"slug": settings.craft_pancancer_connection, "name": "PANCANCER_ATLAS_1",
+         "description": "PanCancer Atlas — genomic alterations, clinical records, mutations."},
+        {"slug": settings.craft_idc_connection, "name": "IDC",
+         "description": "Imaging Data Commons — DICOM cancer imaging + clinical metadata."},
+        {"slug": settings.craft_ecommerce_connection, "name": "THELOOK_ECOMMERCE",
+         "description": "Synthetic marketplace: orders, customers, products, order items."},
+        {"slug": settings.craft_ecommerce_br_connection, "name": "BRAZILIAN_E_COMMERCE",
+         "description": "Olist real Brazilian e-commerce orders, reviews, payments."},
+        {"slug": settings.craft_crypto_connection, "name": "CRYPTO",
+         "description": "Blockchain schemas: transactions, token transfers across chains."},
+        {"slug": settings.craft_ga4_connection, "name": "GA4",
+         "description": "Google Analytics 4 events, sessions, users (nested VARIANT)."},
+        {"slug": settings.craft_firebase_connection, "name": "FIREBASE",
+         "description": "Firebase app analytics events and user properties."},
+        {"slug": settings.craft_github_connection, "name": "GITHUB_REPOS",
+         "description": "GitHub repo metadata, languages, commits, licenses."},
+        {"slug": settings.craft_deps_connection, "name": "DEPS_DEV_V1",
+         "description": "deps.dev package dependency graph and security advisories."},
+    ]
+
+
+def _demo_sql_generic(question: str, domain: str) -> str:
+    if domain == "ecommerce":
+        return (
+            "SELECT p.category,\n"
+            "       COUNT(DISTINCT oi.order_id) AS orders,\n"
+            "       ROUND(SUM(oi.sale_price)) AS revenue_usd\n"
+            "FROM THELOOK_ECOMMERCE.ORDER_ITEMS oi\n"
+            "JOIN THELOOK_ECOMMERCE.PRODUCTS p ON oi.product_id = p.id\n"
+            "GROUP BY p.category\n"
+            "ORDER BY revenue_usd DESC\n"
+            "LIMIT 6;"
+        )
+    if domain == "crypto":
+        return (
+            "SELECT symbol,\n"
+            "       COUNT(*) AS transfers,\n"
+            "       ROUND(SUM(value) / 1e18, 2) AS volume\n"
+            "FROM CRYPTO_ETHEREUM.TOKEN_TRANSFERS\n"
+            "WHERE block_timestamp >= DATEADD(day, -30, CURRENT_DATE)\n"
+            "GROUP BY symbol\n"
+            "ORDER BY transfers DESC\n"
+            "LIMIT 6;"
+        )
+    if domain == "analytics":
+        return (
+            "SELECT event_name,\n"
+            "       COUNT(*) AS events,\n"
+            "       COUNT(DISTINCT user_pseudo_id) AS users\n"
+            "FROM GA4.EVENTS, LATERAL FLATTEN(input => event_params)\n"
+            "GROUP BY event_name\n"
+            "ORDER BY events DESC\n"
+            "LIMIT 6;"
+        )
+    # supply_chain
+    return (
+        "SELECT d.dependency_name AS package,\n"
+        "       COUNT(DISTINCT d.dependent_name) AS dependents,\n"
+        "       COUNT(DISTINCT a.advisory_id) AS advisories\n"
+        "FROM DEPS_DEV_V1.DEPENDENCIES d\n"
+        "LEFT JOIN DEPS_DEV_V1.ADVISORIES a ON a.package_name = d.dependency_name\n"
+        "GROUP BY package\n"
+        "ORDER BY dependents DESC\n"
+        "LIMIT 6;"
+    )
+
+
+def _demo_rows_generic(sql: str, domain: str, context: dict) -> tuple[list[dict], list[str]]:
+    seed = context.get("question") or sql
+    if domain == "ecommerce":
+        cats = ["Intimates", "Jeans", "Sweaters", "Outerwear & Coats", "Active", "Accessories"]
+        rows = []
+        for c in cats:
+            orders = _seed_int(c + "ord", 1800, 9200)
+            rows.append({"category": c, "orders": orders,
+                         "revenue_usd": orders * _seed_int(c + "aov", 34, 120)})
+        rows.sort(key=lambda r: r["revenue_usd"], reverse=True)
+        return rows, ["category", "orders", "revenue_usd"]
+    if domain == "crypto":
+        tokens = ["USDT", "USDC", "WETH", "DAI", "LINK", "UNI"]
+        rows = []
+        for t in tokens:
+            transfers = _seed_int(t + "tx", 120_000, 2_400_000)
+            rows.append({"symbol": t, "transfers": transfers,
+                         "volume": round(transfers * _seed_int(t + "v", 2, 90) / 100.0, 2)})
+        rows.sort(key=lambda r: r["transfers"], reverse=True)
+        return rows, ["symbol", "transfers", "volume"]
+    if domain == "analytics":
+        events = ["page_view", "session_start", "user_engagement", "scroll", "click", "purchase"]
+        rows = []
+        for e in events:
+            ev = _seed_int(e + "ev", 8_000, 320_000)
+            rows.append({"event_name": e, "events": ev,
+                         "users": max(1, int(ev / _seed_int(e + "u", 2, 9)))})
+        rows.sort(key=lambda r: r["events"], reverse=True)
+        return rows, ["event_name", "events", "users"]
+    # supply_chain
+    pkgs = ["lodash", "react", "left-pad", "express", "axios", "chalk"]
+    rows = []
+    for p in pkgs:
+        dependents = _seed_int(p + "dep", 4_000, 210_000)
+        rows.append({"package": p, "dependents": dependents,
+                     "advisories": _seed_int(p + "adv", 0, 9)})
+    rows.sort(key=lambda r: r["dependents"], reverse=True)
+    return rows, ["package", "dependents", "advisories"]
 
 
 _craft: Optional[CraftMCP] = None
